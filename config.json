@@ -1,0 +1,23 @@
+{
+  "experiment_name": "baseline",
+  "dataset": {
+    "train_data_file_path": "./data/train.csv",
+    "test_data_file_path": "./data/train.csv",
+    "batch_size": 64,
+    "num_workers": 8
+  },
+  "experiment": {
+    "num_epochs": 10,
+    "learning_rate": 5e-5
+  },
+  "model": {
+    "hidden_size": 512,
+    "embedding_size": 300,
+    "model_type": "LSTM"
+  },
+  "generation": {
+    "max_length": 20,
+    "deterministic": true,
+    "temperature": 2
+  }
+}
