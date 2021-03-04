@@ -1,0 +1,337 @@
+################################################################################
+# CSE 251 B: Final Project
+# Code by Keshav Rungta, Geeling Chau, Anshuman Dewangan, Margot Wagner 
+# and Jin-Long Huang
+# Winter 2021
+################################################################################
+from comet_ml import Experiment
+import matplotlib.pyplot as plt
+import matplotlib.image as mpimg
+import numpy as np
+import torch
+import torch.optim as optim
+import sys
+
+from datetime import datetime
+from constants import *
+from dataset_factory import getDataloaders
+from model_factory import getModel
+from file_utils import *
+
+class _Experiment(object):
+    def __init__(self, name):
+        config_data = read_file_in_dir('./', name + '.json')
+
+        if config_data is None:
+            raise Exception("Configuration file doesn't exist: ", name)
+
+        self.name = config_data['experiment_name']
+
+        dataset_config = config_data['dataset']
+        batch_size = dataset_config['batch_size']
+        num_workers = dataset_config['num_workers']
+        data_file = dataset_config['data_file_path']
+
+        experiment_config = config_data['experiment']
+        self.epochs = experiment_config['num_epochs']
+        learning_rate = experiment_config['learning_rate']
+
+        model_config = config_data['model']
+        hidden_size = model_config['hidden_size']
+        embedding_size = model_config['embedding_size']
+        model_type = model_config['model_type']
+        
+        generation_config = config_data['generation']
+        max_length = generation_config['max_length']
+        prediction_type = ("Stochastic", "Deterministic")[generation_config["deterministic"]]
+        temperature = generation_config['temperature']
+
+        self.experiment_dir = os.path.join(ROOT_STATS_DIR, self.name)
+
+        if LOG_COMET:
+            self.experiment = Experiment(
+                api_key="CaoCCUZVjE0gXKA3cbtMKSSKL",
+                project_name="image-captioning-251b",
+                workspace="keshav919",
+            )
+
+        # Load Datasets
+        tokenizer, self.train_loader, self.val_loader, self.test_loader = getDataloaders(
+            data_file, max_length, batch_size, num_workers)
+
+        vocab = tokenizer.get_vocab()
+        vocab_size = tokenizer.vocab_size
+
+        # Setup Experiment
+        self.current_epoch = 0
+        self.training_losses = []
+        self.bleu1_t = [] # Geeling: log bleu scores
+        self.bleu4_t = []
+        self.bleu1_v = [] # Keshav: log bleu scores
+        self.bleu4_v = []
+        self.val_losses = []
+        self.best_loss = float('inf')
+        self.best_model = None  # Save your best model in this field and use this in test method.
+
+        if LOG_COMET:
+            tags = [self.name, model_type, prediction_type]
+            hyper_params = {
+                "Epochs": self.epochs,
+                "Batch Size": batch_size,
+                "Learning Rate": learning_rate,
+                "Hidden Size": hidden_size,
+                "Embedding Size": embedding_size,
+                "Max Length": max_length,
+                "Temperature": temperature
+            }
+
+            self.experiment.add_tags(tags)
+            self.experiment.log_parameters(hyper_params)
+
+        # Initialize Model
+        self.model = getModel(hidden_size, embedding_size, prediction_type, temperature, vocab_size)
+        self.criterion = torch.nn.CrossEntropyLoss()
+        self.optimizer = optim.Adam(self.model.parameters(), lr=learning_rate)
+
+        self.init_model()
+
+        self.load_experiment() # Load Experiment Data if available
+
+
+    def load_experiment(self):
+        """
+        Loads the experiment data if exists to resume training from last saved checkpoint.
+        """
+        os.makedirs(ROOT_STATS_DIR, exist_ok=True)
+
+        # Since we use comet, all our metrics are logged there rather than these directories. 
+        # Create the dir just for test output
+        os.makedirs(self.experiment_dir, exist_ok=True)
+
+
+    def init_model(self):
+        """
+            Gets GPU ready to use
+        """
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.model.to(self.device)
+        self.criterion.to(self.device)
+
+
+    # Main method to run your experiment. Should be self-explanatory.
+    def run(self):
+        start_epoch = self.current_epoch
+        for epoch in range(start_epoch, self.epochs):  # loop over the dataset multiple times
+            start_time = datetime.now()
+            self.current_epoch = epoch
+
+            train_loss, bleu1_scores_t, bleu4_scores_t = self.train()
+            if LOG_COMET:
+                self.experiment.log_metrics({'Train_Loss': train_loss}, epoch=epoch)
+                self.experiment.log_metrics({'Train_Metric/BLEU-1': bleu1_scores_t}, epoch=epoch)
+                self.experiment.log_metrics({'Train_Metric/BLEU-4': bleu4_scores_t}, epoch=epoch)
+
+            val_loss, bleu1_scores_v, bleu4_scores_v = self.__val()
+            if LOG_COMET:
+                self.experiment.log_metrics({'Val_Loss': val_loss}, epoch=epoch)
+                self.experiment.log_metrics({'Val_Metric/BLEU-1': bleu1_scores_v}, epoch=epoch)
+                self.experiment.log_metrics({'Val_Metric/BLEU-4': bleu4_scores_v}, epoch=epoch)
+
+            # Early stopping
+            if val_loss < self.__best_loss:
+                self.best_loss = val_loss
+                torch.save(self.model, './saved_models/{}'.format(self.name))
+
+
+    def train(self):
+        self.model.train()
+        training_loss = 0
+        bleu1_scores = 0.0
+        bleu4_scores = 0.0
+        print_iter = 250
+        if_counter = 0
+
+        for i, (prem, hyp, lab) in enumerate(self.train_loader):
+            self.model.zero_grad()
+
+            prem = prem.long().to(self.device)
+            hyp = hyp.long().to(self.device)
+            lab = lab.to(self.device)
+
+            # Forward pass
+            preds, raw_outputs = self.model(prem, hyp, lab, self.device, is_teacher_forcing_on=True)
+
+            print(preds, preds.shape)
+            print(raw_outputs, raw_outputs.shape)
+            sys.exit()
+
+            # Calculate loss and perform backprop
+            loss = self.criterion(raw_outputs[:,1:].permute(0, 2, 1), targets[:,1:])
+            loss.backward()
+            self.optimizer.step()
+
+            # Log the training loss
+            training_loss += loss.item()
+
+            # View deterministic predictions
+            if i % print_iter == 0:
+                if_counter += 1
+                # Get the sentence without the <start> and <end> and other tags
+                clean_preds_text = clean_caption(preds, self.vocab)
+                clean_targets_text = clean_caption(targets, self.vocab)
+
+                # Calculate bleu scores
+                b1 = calculate_bleu(bleu1, clean_preds_text, all_caps)
+                b4 = calculate_bleu(bleu4, clean_preds_text, all_caps)
+                bleu1_scores += (b1/len(clean_preds_text))
+                bleu4_scores += (b4/len(clean_preds_text))
+
+                print(i, ": ------ TRAIN ------")
+                print("------ word predictions ------")
+                print(clean_preds_text[0])
+                print("------ truth ------")
+                print(clean_targets_text[0])
+                print()
+
+        return training_loss/(i+1), bleu1_scores/if_counter, bleu4_scores/if_counter
+
+    def val(self):
+        self.model.eval()
+        val_loss = 0
+        bleu1_scores = 0.0
+        bleu4_scores = 0.0
+        print_iter = 100 # Number of iterations to skip before printing predictions 
+        if_counter = 0
+
+
+        with torch.no_grad():
+            for i, (images, captions, img_ids) in enumerate(self.val_loader):
+                # Cut off captions at max length
+                if captions.shape[1] > self.generation_config["max_length"]:
+                    captions = captions[:, :self.generation_config["max_length"]]
+
+                # Move variables to GPU
+                inputs = images.to(self.device)
+                targets = captions.to(self.device)
+
+                # Forward pass
+                preds, raw_outputs = self.model(inputs, targets, self.device, is_teacher_forcing_on=True)
+
+                # Calculate loss
+                loss = self.criterion(raw_outputs[:,1:].permute(0, 2, 1), targets[:,1:])
+                val_loss += loss.item()
+
+                # Get all original captions for all images in one batch
+                all_caps = get_captions(img_ids, self.coco)
+
+                # View deterministic predictions
+                if i % print_iter == 0:
+                    if_counter += 1
+                    # Get the sentence without the <start> and <end> and other tags
+                    clean_preds_text = clean_caption(preds, self.vocab)
+                    clean_targets_text = clean_caption(targets, self.vocab)
+
+                    # Calculate bleu scores
+                    b1 = calculate_bleu(bleu1, clean_preds_text, all_caps)
+                    b4 = calculate_bleu(bleu4, clean_preds_text, all_caps)
+                    bleu1_scores += (b1/len(clean_preds_text))
+                    bleu4_scores += (b4/len(clean_preds_text))
+
+                    print(i, ": ------ VALIDATION ------")
+                    print("------ word predictions ------")
+                    print(clean_preds_text[0])
+                    print("------ truth ------")
+                    print(clean_targets_text[0])
+                    print()
+
+        return val_loss/(i+1), bleu1_scores/if_counter, bleu4_scores/if_counter
+
+    #  bleu scores using the best model. Use utility functions provided to you in caption_utils.
+    #  Note than you'll need image_ids and COCO object in this case to fetch all captions to generate bleu scores.
+    def test(self):
+        self.model = torch.load('./saved_models/{}'.format(self.name))
+        self.model.eval()
+        test_loss = 0
+        bleu1_scores = 0.0
+        bleu4_scores = 0.0
+
+        with torch.no_grad():
+            for i, (images, captions, img_ids) in enumerate(self.test_loader):
+                # Cut off captions at max length
+                if captions.shape[1] > self.generation_config["max_length"]:
+                    captions = captions[:, :self.generation_config["max_length"]]
+
+                # Get all original captions for all images in one batch
+                all_caps = get_captions(img_ids, self.coco_test)
+
+                # Move variables to GPU
+                inputs = images.to(self.device)
+                targets = captions.to(self.device)
+
+                # Forward pass (raw_outputs for test loss calculation, preds for non teacher forced captions + BLEU captions)
+                _, raw_outputs = self.model(inputs, targets, self.device, is_teacher_forcing_on=True)
+                preds, _ = self.model(inputs, targets, self.device, is_teacher_forcing_on=False)
+
+                # Calculate loss
+                loss = self.criterion(raw_outputs[:,1:].permute(0, 2, 1), targets[:,1:])
+                test_loss += loss.item()
+
+                # Get the cleaned sentences for bleu evaluation
+                clean_preds_text = clean_caption(preds, self.vocab)
+
+                # Calculate bleu scores
+                b1 = calculate_bleu(bleu1, clean_preds_text, all_caps)
+                b4 = calculate_bleu(bleu4, clean_preds_text, all_caps)
+                bleu1_scores += (b1/len(clean_preds_text))
+                bleu4_scores += (b4/len(clean_preds_text))
+
+        bleu1_scores = bleu1_scores/(i+1)
+        bleu4_scores = bleu4_scores/(i+1)
+        test_loss = test_loss/(i+1)
+
+        result_str = "Test Performance: Loss: {}, Bleu1: {}, Bleu4: {}".format(test_loss, bleu1_scores, bleu4_scores)
+        self.log(result_str)
+
+        if LOG_COMET:
+            self.experiment.log_metrics({'Test_Loss': test_loss})
+            self.experiment.log_metrics({'Test_Metric/BLEU-1': bleu1_scores})
+            self.experiment.log_metrics({'Test_Metric/BLEU-4': bleu4_scores})
+
+        return test_loss, bleu1_scores, bleu4_scores
+
+    def save_model(self):
+        root_model_path = os.path.join(self.experiment_dir, 'latest_model.pt')
+        model_dict = self.model.state_dict()
+        state_dict = {'model': model_dict, 'optimizer': self.optimizer.state_dict()}
+        torch.save(state_dict, root_model_path)
+
+    def __record_stats(self, train_loss, bleu1_t, bleu4_t, val_loss, bleu1_v, bleu4_v):
+        self.training_losses.append(train_loss)
+        self.bleu1_t.append(bleu1_t)
+        self.bleu4_t.append(bleu4_t)
+        self.val_losses.append(val_loss)
+        self.bleu1_v.append(bleu1_v)
+        self.bleu4_v.append(bleu4_v)
+
+        self.plot_stats()
+
+        write_to_file_in_dir(self.experiment_dir, 'training_losses.txt', self.__training_losses)
+        write_to_file_in_dir(self.experiment_dir, 'bleu1.txt', self.bleu1)
+        write_to_file_in_dir(self.experiment_dir, 'bleu4.txt', self.bleu4)
+        write_to_file_in_dir(self.experiment_dir, 'val_losses.txt', self.val_losses)
+
+    def log(self, log_str, file_name=None):
+        print(log_str)
+        log_to_file_in_dir(self.experiment_dir, 'all.log', log_str)
+        if file_name is not None:
+            log_to_file_in_dir(self.experiment_dir, file_name, log_str)
+
+    def log_epoch_stats(self, start_time):
+        time_elapsed = datetime.now() - start_time
+        time_to_completion = time_elapsed * (self.epochs - self.current_epoch - 1)
+        train_loss = self.training_losses[self.current_epoch]
+        val_loss = self.val_losses[self.current_epoch]
+        summary_str = "Epoch: {}, Train Loss: {}, Val Loss: {}, Took {}, ETA: {}\n"
+        summary_str = summary_str.format(self.current_epoch + 1, train_loss, val_loss, str(time_elapsed),
+                                         str(time_to_completion))
+        self.log(summary_str, 'epoch.log')

@@ -6,5 +6,6 @@
 # Additional data
 /data/*
 
-# VSCODE Files
+# Metadata Files
 .vscode/*
+__pycache__/*

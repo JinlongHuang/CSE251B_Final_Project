@@ -10,11 +10,7 @@ import torchvision
 import sys
 
 # Build and return the model here based on the configuration.
-def get_model(config_data):
-    hidden_size = config_data['model']['hidden_size']
-    embedding_size = config_data['model']['embedding_size']
-    deterministic = config_data['generation']['deterministic']
-    temperature = config_data['generation']['temperature']
+def getModel(hidden_size, embedding_size, deterministic, temperature, vocab_size):
 
     return VAE(embedding_size, hidden_size, vocab_size, deterministic, temperature)
 
@@ -34,6 +30,8 @@ class VAE(nn.Module):
         
         self.deterministic = deterministic
         self.temperature = temperature
+
+        self.vocab_size = vocab_size
 
         # Embedding layer to transform prem and hypo to embedding size 
         self.embed = nn.Embedding(vocab_size, embedding_size) 
@@ -61,12 +59,12 @@ class VAE(nn.Module):
         torch.nn.init.xavier_uniform_(self.decoder_ll.bias.reshape((-1,1)))
         
         
-    def forward(self, premises, hypothesis, labels, device, is_teacher_forcing_on=True): # captions: batch_size x length 
+    def forward(self, premises, hypothesis, labels, device, is_teacher_forcing_on=True):
         # Encode premise features
         prem_embedded = self.embed(premises)
+
         feat = self.encoder_ll(prem_embedded)
         feat = torch.unsqueeze(feat,0) # Reshape for format that lstm is happy with
-        
         # Decoder
         outputted_words = torch.empty(hypothesis.shape).to(device) # batch_size x 20 length
         raw_outputs = torch.empty((hypothesis.shape[0], hypothesis.shape[1], self.vocab_size)).to(device) # batch_size x 20 x vocab_size

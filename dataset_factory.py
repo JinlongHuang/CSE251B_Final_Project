@@ -3,11 +3,12 @@ import torch
 from torch.utils.data import Dataset, DataLoader, random_split # For custom data-sets
 from transformers import BertTokenizer
 
+# TODO: Remove this after we finish debugging!
 torch.manual_seed(0)
 
-def getDataloaders(csv_file, config_data):
+def getDataloaders(csv_file, max_length, batch_size, num_workers):
 
-    all_data = TextDataset(csv_file, config_data['generation']['max_length'])
+    all_data = TextDataset(csv_file, max_length)
     num_train = int(len(all_data) * 0.7)
     num_val = int(len(all_data) * 0.2)
     num_test = int(len(all_data) * 0.1)
@@ -16,21 +17,21 @@ def getDataloaders(csv_file, config_data):
     train_dataset, val_dataset, test_dataset = random_split(all_data, (num_train, num_val, num_test))
 
     train_dataloader = DataLoader(dataset=train_dataset,
-                      batch_size=config_data['dataset']['batch_size'],
+                      batch_size=batch_size,
                       shuffle=True,
-                      num_workers=config_data['dataset']['num_workers'],
+                      num_workers=num_workers,
                       pin_memory=True) # Pin memory makes it faster to move from CPU to GPU, optional
     val_dataloader = DataLoader(dataset=val_dataset,
-                      batch_size=config_data['dataset']['batch_size'],
+                      batch_size=batch_size,
                       shuffle=True,
-                      num_workers=config_data['dataset']['num_workers'],
+                      num_workers=num_workers,
                       pin_memory=True)
     test_dataloader = DataLoader(dataset=test_dataset,
-                      batch_size=config_data['dataset']['batch_size'],
+                      batch_size=batch_size,
                       shuffle=False,
-                      num_workers=config_data['dataset']['num_workers'],
+                      num_workers=num_workers,
                       pin_memory=True)
-    return train_dataloader, val_dataloader, test_dataloader
+    return all_data.tokenizer, train_dataloader, val_dataloader, test_dataloader
     
 
 class TextDataset(Dataset):
