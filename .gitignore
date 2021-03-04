@@ -1,0 +1,10 @@
+# Images
+*.png
+*.jpg
+*.jpeg
+
+# Additional data
+/data/*
+
+# VSCODE Files
+.vscode/*
