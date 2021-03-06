@@ -89,7 +89,7 @@ class _Experiment(object):
             self.experiment.log_parameters(hyper_params)
 
         # Initialize Model
-        self.model = getModel(hidden_size, embedding_size, prediction_type, temperature, vocab_size)
+        self.model = getModel(hidden_size, embedding_size, temperature, vocab_size, generation_config["deterministic"])
         self.criterion = torch.nn.CrossEntropyLoss()
         self.optimizer = optim.Adam(self.model.parameters(), lr=learning_rate)
 
@@ -130,17 +130,17 @@ class _Experiment(object):
                 self.experiment.log_metrics({'Train_Loss': train_loss}, epoch=epoch)
                 self.experiment.log_metrics({'Train_Metric/BLEU-1': bleu1_scores_t}, epoch=epoch)
                 self.experiment.log_metrics({'Train_Metric/BLEU-4': bleu4_scores_t}, epoch=epoch)
-
-            val_loss, bleu1_scores_v, bleu4_scores_v = self.__val()
-            if LOG_COMET:
-                self.experiment.log_metrics({'Val_Loss': val_loss}, epoch=epoch)
-                self.experiment.log_metrics({'Val_Metric/BLEU-1': bleu1_scores_v}, epoch=epoch)
-                self.experiment.log_metrics({'Val_Metric/BLEU-4': bleu4_scores_v}, epoch=epoch)
+            break
+            # val_loss, bleu1_scores_v, bleu4_scores_v = self.val()
+            # if LOG_COMET:
+            #     self.experiment.log_metrics({'Val_Loss': val_loss}, epoch=epoch)
+            #     self.experiment.log_metrics({'Val_Metric/BLEU-1': bleu1_scores_v}, epoch=epoch)
+            #     self.experiment.log_metrics({'Val_Metric/BLEU-4': bleu4_scores_v}, epoch=epoch)
 
             # Early stopping
-            if val_loss < self.__best_loss:
-                self.best_loss = val_loss
-                torch.save(self.model, './saved_models/{}'.format(self.name))
+            # if val_loss < self.__best_loss:
+            #     self.best_loss = val_loss
+            #     torch.save(self.model, './saved_models/{}'.format(self.name))
 
 
     def train(self):
@@ -192,6 +192,8 @@ class _Experiment(object):
                 print("------ truth ------")
                 print(clean_targets_text[0])
                 print()
+            if i > 600:
+                break
 
         return training_loss/(i+1), bleu1_scores/if_counter, bleu4_scores/if_counter
 

@@ -10,7 +10,7 @@ import torchvision
 import sys
 
 # Build and return the model here based on the configuration.
-def getModel(hidden_size, embedding_size, deterministic, temperature, vocab_size):
+def getModel(hidden_size, embedding_size, vocab_size, deterministic, temperature):
 
     return VAE(embedding_size, hidden_size, vocab_size, deterministic, temperature)
 
@@ -34,10 +34,8 @@ class VAE(nn.Module):
         self.vocab_size = vocab_size
 
         # Embedding layer to transform prem and hypo to embedding size 
-        self.embed = nn.Embedding(vocab_size, embedding_size) 
-
-        # Define Encoder 
-        self.encoder_ll = nn.Linear(embedding_size, hidden_size)
+        self.embed = nn.Embedding(vocab_size, embedding_size) # Also used for decoder
+        self.enc_lstm = nn.LSTM(embedding_size, hidden_size, batch_first=True)
 
         # Define Decoder
         self.dec_lstm = nn.LSTM(embedding_size, hidden_size, batch_first=True)
@@ -51,28 +49,27 @@ class VAE(nn.Module):
         Initialize weights
         """
         # Initialize encoder layer weights
-        torch.nn.init.xavier_uniform_(self.encoder_ll.weight)
-        torch.nn.init.xavier_uniform_(self.encoder_ll.bias.reshape((-1,1)))
+        # None :D 
 
         # Initialize decoder layer weights
         torch.nn.init.xavier_uniform_(self.decoder_ll.weight)
         torch.nn.init.xavier_uniform_(self.decoder_ll.bias.reshape((-1,1)))
         
-        
     def forward(self, premises, hypothesis, labels, device, is_teacher_forcing_on=True):
         # Encode premise features
+        batch_size = premises.shape[0]
+        enc_hidden = (torch.zeros(1, batch_size, self.hidden_size).to(device),
+                torch.zeros(1, batch_size, self.hidden_size).to(device))
         prem_embedded = self.embed(premises)
+        outputs, hidden = self.enc_lstm(prem_embedded, enc_hidden) # hidden is the set of feats that will be passed to decoder
 
-        feat = self.encoder_ll(prem_embedded)
-        feat = torch.unsqueeze(feat,0) # Reshape for format that lstm is happy with
         # Decoder
-        outputted_words = torch.empty(hypothesis.shape).to(device) # batch_size x 20 length
-        raw_outputs = torch.empty((hypothesis.shape[0], hypothesis.shape[1], self.vocab_size)).to(device) # batch_size x 20 x vocab_size
+        outputted_words = torch.zeros(hypothesis.shape).to(device) # batch_size x 20 length
+        raw_outputs = torch.zeros((hypothesis.shape[0], hypothesis.shape[1], self.vocab_size)).to(device) # batch_size x 20 x vocab_size
 
         outputted_words[:, 0] = hypothesis[:, 0] # Initialize the output with start id
         pred = torch.unsqueeze(hypothesis[:, 0], 1) # All the start ids 
 
-        hidden = (feat, feat)
         for i in range(1, hypothesis.shape[1]):
             embedding = self.embed(pred)
 
