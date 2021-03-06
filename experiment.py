@@ -61,7 +61,7 @@ class _Experiment(object):
 
         vocab = tokenizer.get_vocab()
         vocab_size = tokenizer.vocab_size
-
+        
         # Setup Experiment
         self.current_epoch = 0
         self.training_losses = []
@@ -89,7 +89,7 @@ class _Experiment(object):
             self.experiment.log_parameters(hyper_params)
 
         # Initialize Model
-        self.model = getModel(hidden_size, embedding_size, temperature, vocab_size, generation_config["deterministic"])
+        self.model = getModel(hidden_size, embedding_size, vocab_size, prediction_type, temperature)
         self.criterion = torch.nn.CrossEntropyLoss()
         self.optimizer = optim.Adam(self.model.parameters(), lr=learning_rate)
 
@@ -159,10 +159,10 @@ class _Experiment(object):
             lab = lab.to(self.device)
 
             # Forward pass
-            preds, raw_outputs = self.model(prem, hyp, lab, self.device, is_teacher_forcing_on=True)
+            preds, raw_outputs = self.model(prem, hyp, lab, is_teacher_forcing_on=True)
 
-            print(preds, preds.shape)
-            print(raw_outputs, raw_outputs.shape)
+            # print(preds, preds.shape)
+            # print(raw_outputs, raw_outputs.shape)
             sys.exit()
 
             # Calculate loss and perform backprop

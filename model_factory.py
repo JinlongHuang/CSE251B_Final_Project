@@ -11,7 +11,7 @@ import sys
 
 # Build and return the model here based on the configuration.
 def getModel(hidden_size, embedding_size, vocab_size, deterministic, temperature):
-
+    
     return VAE(embedding_size, hidden_size, vocab_size, deterministic, temperature)
 
     
@@ -32,7 +32,7 @@ class VAE(nn.Module):
         self.temperature = temperature
 
         self.vocab_size = vocab_size
-
+        
         # Embedding layer to transform prem and hypo to embedding size 
         self.embed = nn.Embedding(vocab_size, embedding_size) # Also used for decoder
         self.enc_lstm = nn.LSTM(embedding_size, hidden_size, batch_first=True)
@@ -55,12 +55,18 @@ class VAE(nn.Module):
         torch.nn.init.xavier_uniform_(self.decoder_ll.weight)
         torch.nn.init.xavier_uniform_(self.decoder_ll.bias.reshape((-1,1)))
         
-    def forward(self, premises, hypothesis, labels, device, is_teacher_forcing_on=True):
+    def forward(self, premises, hypothesis, labels, is_teacher_forcing_on=True):
+
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         # Encode premise features
         batch_size = premises.shape[0]
-        enc_hidden = (torch.zeros(1, batch_size, self.hidden_size).to(device),
-                torch.zeros(1, batch_size, self.hidden_size).to(device))
+        h_0 = torch.zeros(1, batch_size, self.hidden_size).to(device)
+        enc_hidden = (h_0,h_0)
         prem_embedded = self.embed(premises)
+
+        # print(len(enc_hidden), enc_hidden[0].shape)
+        # print(prem_embedded.shape)
+        # sys.exit()
         outputs, hidden = self.enc_lstm(prem_embedded, enc_hidden) # hidden is the set of feats that will be passed to decoder
 
         # Decoder
@@ -74,7 +80,7 @@ class VAE(nn.Module):
             embedding = self.embed(pred)
 
             # Run through LSTM
-            ltsm_out, hidden = self.dec_lstm(embedding, hidden)
+            lstm_out, hidden = self.dec_lstm(embedding, hidden)
 
             # Create raw output
             outputs = self.decoder_ll(lstm_out) 
@@ -83,7 +89,7 @@ class VAE(nn.Module):
             raw_outputs[:, i, :] = outputs.squeeze()
 
             # Get predicted word 
-            if self.deterministic:
+            if self.deterministic == "Deterministic":
                 pred = torch.argmax(outputs, dim=2) # 64 x 1
             else:
                 pred = stochastic_generation(outputs, self.temperature)
@@ -94,5 +100,5 @@ class VAE(nn.Module):
             # If we're training, use teacher forcing instead
             if is_teacher_forcing_on:
                 pred = torch.unsqueeze(hypothesis[:, i],1) # 64 x 1
-            
+        
         return outputted_words, raw_outputs
