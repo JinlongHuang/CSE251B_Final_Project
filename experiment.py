@@ -17,6 +17,7 @@ from constants import *
 from dataset_factory import getDataloaders
 from model_factory import getModel
 from file_utils import *
+from caption_utils import * 
 
 class _Experiment(object):
     def __init__(self, name):
@@ -58,9 +59,6 @@ class _Experiment(object):
         # Load Datasets
         tokenizer, self.train_loader, self.val_loader, self.test_loader = getDataloaders(
             data_file, max_length, batch_size, num_workers)
-
-        vocab = tokenizer.get_vocab()
-        vocab_size = tokenizer.vocab_size
         
         # Setup Experiment
         self.current_epoch = 0
@@ -89,7 +87,9 @@ class _Experiment(object):
             self.experiment.log_parameters(hyper_params)
 
         # Initialize Model
-        self.model = getModel(hidden_size, embedding_size, vocab_size, prediction_type, temperature)
+        self.tokenizer = tokenizer
+        self.vocab_size = tokenizer.vocab_size
+        self.model = getModel(config_data, self.vocab_size)
         self.criterion = torch.nn.CrossEntropyLoss()
         self.optimizer = optim.Adam(self.model.parameters(), lr=learning_rate)
 
@@ -130,17 +130,17 @@ class _Experiment(object):
                 self.experiment.log_metrics({'Train_Loss': train_loss}, epoch=epoch)
                 self.experiment.log_metrics({'Train_Metric/BLEU-1': bleu1_scores_t}, epoch=epoch)
                 self.experiment.log_metrics({'Train_Metric/BLEU-4': bleu4_scores_t}, epoch=epoch)
-            break
-            # val_loss, bleu1_scores_v, bleu4_scores_v = self.val()
-            # if LOG_COMET:
-            #     self.experiment.log_metrics({'Val_Loss': val_loss}, epoch=epoch)
-            #     self.experiment.log_metrics({'Val_Metric/BLEU-1': bleu1_scores_v}, epoch=epoch)
-            #     self.experiment.log_metrics({'Val_Metric/BLEU-4': bleu4_scores_v}, epoch=epoch)
+            
+            val_loss, bleu1_scores_v, bleu4_scores_v = self.val()
+            if LOG_COMET:
+                self.experiment.log_metrics({'Val_Loss': val_loss}, epoch=epoch)
+                self.experiment.log_metrics({'Val_Metric/BLEU-1': bleu1_scores_v}, epoch=epoch)
+                self.experiment.log_metrics({'Val_Metric/BLEU-4': bleu4_scores_v}, epoch=epoch)
 
             # Early stopping
-            # if val_loss < self.__best_loss:
-            #     self.best_loss = val_loss
-            #     torch.save(self.model, './saved_models/{}'.format(self.name))
+            if val_loss < self.best_loss:
+                self.best_loss = val_loss
+                torch.save(self.model, './saved_models/{}'.format(self.name))
 
 
     def train(self):
@@ -148,7 +148,7 @@ class _Experiment(object):
         training_loss = 0
         bleu1_scores = 0.0
         bleu4_scores = 0.0
-        print_iter = 250
+        print_iter = 100
         if_counter = 0
 
         for i, (prem, hyp, lab) in enumerate(self.train_loader):
@@ -159,14 +159,10 @@ class _Experiment(object):
             lab = lab.to(self.device)
 
             # Forward pass
-            preds, raw_outputs = self.model(prem, hyp, lab, is_teacher_forcing_on=True)
-
-            # print(preds, preds.shape)
-            # print(raw_outputs, raw_outputs.shape)
-            sys.exit()
+            preds, raw_outputs = self.model(prem, hyp, lab, self.device, is_teacher_forcing_on=True)
 
             # Calculate loss and perform backprop
-            loss = self.criterion(raw_outputs[:,1:].permute(0, 2, 1), targets[:,1:])
+            loss = self.criterion(raw_outputs[:,1:].permute(0, 2, 1), hyp[:,1:])
             loss.backward()
             self.optimizer.step()
 
@@ -177,23 +173,21 @@ class _Experiment(object):
             if i % print_iter == 0:
                 if_counter += 1
                 # Get the sentence without the <start> and <end> and other tags
-                clean_preds_text = clean_caption(preds, self.vocab)
-                clean_targets_text = clean_caption(targets, self.vocab)
+                clean_preds_text = clean_caption(preds, self.tokenizer)
+                clean_targets_text = clean_caption(hyp, self.tokenizer)
 
                 # Calculate bleu scores
-                b1 = calculate_bleu(bleu1, clean_preds_text, all_caps)
-                b4 = calculate_bleu(bleu4, clean_preds_text, all_caps)
+                b1 = calculate_bleu(bleu1, clean_preds_text, clean_targets_text)
+                b4 = calculate_bleu(bleu4, clean_preds_text, clean_targets_text)
                 bleu1_scores += (b1/len(clean_preds_text))
                 bleu4_scores += (b4/len(clean_preds_text))
 
-                print(i, ": ------ TRAIN ------")
+                print(self.current_epoch, i, ": ------ TRAIN ------")
                 print("------ word predictions ------")
                 print(clean_preds_text[0])
                 print("------ truth ------")
                 print(clean_targets_text[0])
                 print()
-            if i > 600:
-                break
 
         return training_loss/(i+1), bleu1_scores/if_counter, bleu4_scores/if_counter
 
@@ -205,46 +199,42 @@ class _Experiment(object):
         print_iter = 100 # Number of iterations to skip before printing predictions 
         if_counter = 0
 
-
         with torch.no_grad():
-            for i, (images, captions, img_ids) in enumerate(self.val_loader):
-                # Cut off captions at max length
-                if captions.shape[1] > self.generation_config["max_length"]:
-                    captions = captions[:, :self.generation_config["max_length"]]
+            for i, (prem, hyp, lab) in enumerate(self.val_loader):
 
-                # Move variables to GPU
-                inputs = images.to(self.device)
-                targets = captions.to(self.device)
+                prem = prem.long().to(self.device)
+                hyp = hyp.long().to(self.device)
+                lab = lab.to(self.device)
 
                 # Forward pass
-                preds, raw_outputs = self.model(inputs, targets, self.device, is_teacher_forcing_on=True)
+                preds, raw_outputs = self.model(prem, hyp, lab, self.device, is_teacher_forcing_on=True)
 
-                # Calculate loss
-                loss = self.criterion(raw_outputs[:,1:].permute(0, 2, 1), targets[:,1:])
+                # Calculate loss and perform backprop
+                loss = self.criterion(raw_outputs[:,1:].permute(0, 2, 1), hyp[:,1:])
+
+                # Log the training loss
                 val_loss += loss.item()
-
-                # Get all original captions for all images in one batch
-                all_caps = get_captions(img_ids, self.coco)
 
                 # View deterministic predictions
                 if i % print_iter == 0:
                     if_counter += 1
                     # Get the sentence without the <start> and <end> and other tags
-                    clean_preds_text = clean_caption(preds, self.vocab)
-                    clean_targets_text = clean_caption(targets, self.vocab)
+                    clean_preds_text = clean_caption(preds, self.tokenizer)
+                    clean_targets_text = clean_caption(hyp, self.tokenizer)
 
                     # Calculate bleu scores
-                    b1 = calculate_bleu(bleu1, clean_preds_text, all_caps)
-                    b4 = calculate_bleu(bleu4, clean_preds_text, all_caps)
+                    b1 = calculate_bleu(bleu1, clean_preds_text, clean_targets_text)
+                    b4 = calculate_bleu(bleu4, clean_preds_text, clean_targets_text)
                     bleu1_scores += (b1/len(clean_preds_text))
                     bleu4_scores += (b4/len(clean_preds_text))
 
-                    print(i, ": ------ VALIDATION ------")
+                    print(self.current_epoch, i, ": ------ VALIDATION ------")
                     print("------ word predictions ------")
                     print(clean_preds_text[0])
                     print("------ truth ------")
                     print(clean_targets_text[0])
                     print()
+
 
         return val_loss/(i+1), bleu1_scores/if_counter, bleu4_scores/if_counter
 
@@ -253,39 +243,44 @@ class _Experiment(object):
     def test(self):
         self.model = torch.load('./saved_models/{}'.format(self.name))
         self.model.eval()
+        print_iter = 50 
         test_loss = 0
         bleu1_scores = 0.0
         bleu4_scores = 0.0
 
         with torch.no_grad():
-            for i, (images, captions, img_ids) in enumerate(self.test_loader):
-                # Cut off captions at max length
-                if captions.shape[1] > self.generation_config["max_length"]:
-                    captions = captions[:, :self.generation_config["max_length"]]
+            for i, (prem, hyp, lab) in enumerate(self.test_loader):
 
-                # Get all original captions for all images in one batch
-                all_caps = get_captions(img_ids, self.coco_test)
+                prem = prem.long().to(self.device)
+                hyp = hyp.long().to(self.device)
+                lab = lab.to(self.device)
 
-                # Move variables to GPU
-                inputs = images.to(self.device)
-                targets = captions.to(self.device)
+                # Forward pass
+                _, raw_outputs = self.model(prem, hyp, lab, self.device, is_teacher_forcing_on=True)
+                preds, _ = self.model(prem, hyp, lab, self.device, is_teacher_forcing_on=False)
 
-                # Forward pass (raw_outputs for test loss calculation, preds for non teacher forced captions + BLEU captions)
-                _, raw_outputs = self.model(inputs, targets, self.device, is_teacher_forcing_on=True)
-                preds, _ = self.model(inputs, targets, self.device, is_teacher_forcing_on=False)
+                # Calculate loss and perform backprop
+                loss = self.criterion(raw_outputs[:,1:].permute(0, 2, 1), hyp[:,1:])
 
-                # Calculate loss
-                loss = self.criterion(raw_outputs[:,1:].permute(0, 2, 1), targets[:,1:])
+                # Log the training loss
                 test_loss += loss.item()
 
-                # Get the cleaned sentences for bleu evaluation
-                clean_preds_text = clean_caption(preds, self.vocab)
+                # Get the sentence without the <start> and <end> and other tags
+                clean_preds_text = clean_caption(preds, self.tokenizer)
+                clean_targets_text = clean_caption(hyp, self.tokenizer)
 
                 # Calculate bleu scores
-                b1 = calculate_bleu(bleu1, clean_preds_text, all_caps)
-                b4 = calculate_bleu(bleu4, clean_preds_text, all_caps)
+                b1 = calculate_bleu(bleu1, clean_preds_text, clean_targets_text)
+                b4 = calculate_bleu(bleu4, clean_preds_text, clean_targets_text)
                 bleu1_scores += (b1/len(clean_preds_text))
                 bleu4_scores += (b4/len(clean_preds_text))
+                if i % print_iter == 0: 
+                    print(i, ": ------ TEST ------")
+                    print("------ word predictions ------")
+                    print(clean_preds_text[0])
+                    print("------ truth ------")
+                    print(clean_targets_text[0])
+                    print()
 
         bleu1_scores = bleu1_scores/(i+1)
         bleu4_scores = bleu4_scores/(i+1)

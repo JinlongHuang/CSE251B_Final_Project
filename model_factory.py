@@ -8,9 +8,14 @@ import torch.nn as nn
 import torch
 import torchvision
 import sys
+from caption_utils import *
 
 # Build and return the model here based on the configuration.
-def getModel(hidden_size, embedding_size, vocab_size, deterministic, temperature):
+def getModel(config, vocab_size):
+    embedding_size = config['model']['embedding_size']
+    hidden_size = config['model']['hidden_size']
+    deterministic = config['generation']['deterministic']
+    temperature = config['generation']['temperature']
     
     return VAE(embedding_size, hidden_size, vocab_size, deterministic, temperature)
 
@@ -55,18 +60,15 @@ class VAE(nn.Module):
         torch.nn.init.xavier_uniform_(self.decoder_ll.weight)
         torch.nn.init.xavier_uniform_(self.decoder_ll.bias.reshape((-1,1)))
         
-    def forward(self, premises, hypothesis, labels, is_teacher_forcing_on=True):
+    def forward(self, premises, hypothesis, labels, device, is_teacher_forcing_on=True):
 
-        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         # Encode premise features
+        premises[:, 0] = labels # Replace start tag with the label
+        prem_embedded = self.embed(premises)
+
         batch_size = premises.shape[0]
         h_0 = torch.zeros(1, batch_size, self.hidden_size).to(device)
         enc_hidden = (h_0,h_0)
-        prem_embedded = self.embed(premises)
-
-        # print(len(enc_hidden), enc_hidden[0].shape)
-        # print(prem_embedded.shape)
-        # sys.exit()
         outputs, hidden = self.enc_lstm(prem_embedded, enc_hidden) # hidden is the set of feats that will be passed to decoder
 
         # Decoder
@@ -89,7 +91,7 @@ class VAE(nn.Module):
             raw_outputs[:, i, :] = outputs.squeeze()
 
             # Get predicted word 
-            if self.deterministic == "Deterministic":
+            if self.deterministic:
                 pred = torch.argmax(outputs, dim=2) # 64 x 1
             else:
                 pred = stochastic_generation(outputs, self.temperature)
