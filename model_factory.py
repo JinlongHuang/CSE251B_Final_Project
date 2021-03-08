@@ -6,7 +6,6 @@
 ################################################################################
 import torch.nn as nn
 import torch
-import torchvision
 import sys
 from caption_utils import *
 
@@ -63,44 +62,46 @@ class VAE(nn.Module):
     def forward(self, premises, hypothesis, labels, device, is_teacher_forcing_on=True):
 
         # Encode premise features
-        premises[:, 0] = labels # Replace start tag with the label
-        prem_embedded = self.embed(premises)
+        premises[:, 0] = labels # Replace start tag with the label; batch x max_len
+        prem_embedded = self.embed(premises) # batch x max_len x embedding_size
 
         batch_size = premises.shape[0]
         h_0 = torch.zeros(1, batch_size, self.hidden_size).to(device)
         enc_hidden = (h_0,h_0)
-        outputs, hidden = self.enc_lstm(prem_embedded, enc_hidden) # hidden is the set of feats that will be passed to decoder
+        hidden = self.enc_lstm(prem_embedded, enc_hidden)[1] # hidden is the set of feats that will be passed to decoder
 
         # Decoder
-        outputted_words = torch.zeros(hypothesis.shape).to(device) # batch_size x 20 length
-        raw_outputs = torch.zeros((hypothesis.shape[0], hypothesis.shape[1], self.vocab_size)).to(device) # batch_size x 20 x vocab_size
+        outputted_words = torch.zeros(hypothesis.shape).to(device) # batch x max_len
+        raw_outputs = torch.zeros((hypothesis.shape[0], hypothesis.shape[1], self.vocab_size)).to(device) # batch x max_len x vocab_size
 
         outputted_words[:, 0] = hypothesis[:, 0] # Initialize the output with start id
-        pred = torch.unsqueeze(hypothesis[:, 0], 1) # All the start ids 
+        pred = torch.unsqueeze(hypothesis[:, 0], 1) # All the start ids; batch x 1
 
         for i in range(1, hypothesis.shape[1]):
-            embedding = self.embed(pred)
+            embedding = self.embed(pred) # batch x 1 x embedding_size
 
             # Run through LSTM
+            # lstm_out: batch x 1 x hidden_size
+            # hidden:   1 x batch x hidden_size
             lstm_out, hidden = self.dec_lstm(embedding, hidden)
 
             # Create raw output
-            outputs = self.decoder_ll(lstm_out) 
+            outputs = self.decoder_ll(lstm_out) # batch x 1 x vocab_size
 
             # Save raw result
-            raw_outputs[:, i, :] = outputs.squeeze()
+            raw_outputs[:, i, :] = outputs.squeeze() # batch x max_len x vocab_size
 
             # Get predicted word 
             if self.deterministic:
-                pred = torch.argmax(outputs, dim=2) # 64 x 1
+                pred = torch.argmax(outputs, dim=2) # batch x 1
             else:
                 pred = stochastic_generation(outputs, self.temperature)
 
             # Save the word result 
-            outputted_words[:, i] = pred.squeeze() # 64
+            outputted_words[:, i] = pred.squeeze() # batch x max_len
 
             # If we're training, use teacher forcing instead
             if is_teacher_forcing_on:
-                pred = torch.unsqueeze(hypothesis[:, i],1) # 64 x 1
+                pred = torch.unsqueeze(hypothesis[:, i],1) # batch x 1
         
         return outputted_words, raw_outputs
