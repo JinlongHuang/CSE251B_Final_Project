@@ -23,8 +23,6 @@ class VAE(nn.Module):
     def __init__(self, embedding_size, hidden_size, vocab_size, deterministic, temperature):
         """
             Variational Autoencoder 
-            TODO: Test that this works and make this variational  LOL
-
         """
         super(VAE, self).__init__()
 
@@ -41,9 +39,12 @@ class VAE(nn.Module):
         self.embed = nn.Embedding(vocab_size, embedding_size) # Also used for decoder
         self.enc_lstm = nn.LSTM(embedding_size, hidden_size, batch_first=True)
 
+        # Reparameterization layer
+        self.repar_ll = nn.Linear(hidden_size, hidden_size)
+
         # Define Decoder
         self.dec_lstm = nn.LSTM(embedding_size, hidden_size, batch_first=True)
-        self.decoder_ll = nn.Linear(hidden_size, vocab_size) # linear layer
+        self.decoder_ll = nn.Linear(hidden_size, vocab_size)
 
         # Initialize weights
         self.init_weights()
@@ -58,9 +59,14 @@ class VAE(nn.Module):
         # Initialize decoder layer weights
         torch.nn.init.xavier_uniform_(self.decoder_ll.weight)
         torch.nn.init.xavier_uniform_(self.decoder_ll.bias.reshape((-1,1)))
+
+    def reparameterize(self, mu, logvar):
+        std = torch.exp(0.5*logvar)
+        eps = torch.randn_like(std)
+        return mu + eps*std
         
     def forward(self, premises, hypothesis, labels, device, is_teacher_forcing_on=True):
-
+        
         # Encode premise features
         premises[:, 0] = labels # Replace start tag with the label; batch x max_len
         prem_embedded = self.embed(premises) # batch x max_len x embedding_size
@@ -68,7 +74,20 @@ class VAE(nn.Module):
         batch_size = premises.shape[0]
         h_0 = torch.zeros(1, batch_size, self.hidden_size).to(device)
         enc_hidden = (h_0,h_0)
+        # hidden[0]: 1 x batch x hidden_size (hidden state)
+        # hidden[1]: 1 x batch x hidden_size (cell state)
         hidden = self.enc_lstm(prem_embedded, enc_hidden)[1] # hidden is the set of feats that will be passed to decoder
+
+        # Sample using reparameterization
+        # Hidden state
+        mu0 = self.repar_ll(hidden[0].permute(1,0,2))
+        log_var0 = self.repar_ll(hidden[0].permute(1,0,2))
+        z0 = self.reparameterize(mu0, log_var0).permute(1,0,2) # 1 x batch x hidden_size
+        # Cell state
+        mu1 = self.repar_ll(hidden[1].permute(1,0,2))
+        log_var1 = self.repar_ll(hidden[1].permute(1,0,2))
+        z1 = self.reparameterize(mu1, log_var1).permute(1,0,2) # 1 x batch x hidden_size
+        hidden = (z0, z1)
 
         # Decoder
         outputted_words = torch.zeros(hypothesis.shape).to(device) # batch x max_len

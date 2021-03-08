@@ -90,6 +90,7 @@ class _Experiment(object):
         self.tokenizer = tokenizer
         self.vocab_size = tokenizer.vocab_size
         self.model = getModel(config_data, self.vocab_size)
+        # TODO: need to add KL divergence
         self.criterion = torch.nn.CrossEntropyLoss()
         self.optimizer = optim.Adam(self.model.parameters(), lr=learning_rate)
 
@@ -131,16 +132,16 @@ class _Experiment(object):
                 self.experiment.log_metrics({'Train_Metric/BLEU-1': bleu1_scores_t}, epoch=epoch)
                 self.experiment.log_metrics({'Train_Metric/BLEU-4': bleu4_scores_t}, epoch=epoch)
             
-            val_loss, bleu1_scores_v, bleu4_scores_v = self.val()
+            # val_loss, bleu1_scores_v, bleu4_scores_v = self.val()
             if LOG_COMET:
                 self.experiment.log_metrics({'Val_Loss': val_loss}, epoch=epoch)
                 self.experiment.log_metrics({'Val_Metric/BLEU-1': bleu1_scores_v}, epoch=epoch)
                 self.experiment.log_metrics({'Val_Metric/BLEU-4': bleu4_scores_v}, epoch=epoch)
 
             # Early stopping
-            if val_loss < self.best_loss:
-                self.best_loss = val_loss
-                torch.save(self.model, './saved_models/{}'.format(self.name))
+            # if val_loss < self.best_loss:
+            #     self.best_loss = val_loss
+            #     torch.save(self.model, './saved_models/{}'.format(self.name))
 
 
     def train(self):
@@ -152,6 +153,7 @@ class _Experiment(object):
         if_counter = 0
 
         for i, (prem, hyp, lab) in enumerate(self.train_loader):
+            # if i >0: sys.exit()
             self.model.zero_grad()
 
             prem = prem.long().to(self.device)
