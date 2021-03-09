@@ -42,6 +42,7 @@ def clean_caption(indx, tokenizer):
 
     return clean_text
 
+
 def get_captions(img_ids, cocoTest):
     # Gets the captions from the coco object given image ids from the dataloader 
 
@@ -56,6 +57,7 @@ def get_captions(img_ids, cocoTest):
         all_caps[-1] = cap_for_1image
 
     return all_caps
+
 
 def calculate_bleu(bleu_func, clean_preds_text, clean_targets_text):
     # Calculates the aggregate bleu value in the bleu and clean targets text 

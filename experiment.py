@@ -19,6 +19,7 @@ from model_factory import getModel
 from file_utils import *
 from caption_utils import * 
 
+
 class _Experiment(object):
     def __init__(self, name):
         config_data = read_file_in_dir('./', name + '.json')
@@ -90,6 +91,7 @@ class _Experiment(object):
         self.tokenizer = tokenizer
         self.vocab_size = tokenizer.vocab_size
         self.model = getModel(config_data, self.vocab_size)
+        
         # TODO: need to add KL divergence
         self.criterion = torch.nn.CrossEntropyLoss()
         self.optimizer = optim.Adam(self.model.parameters(), lr=learning_rate)
@@ -119,7 +121,6 @@ class _Experiment(object):
         self.criterion.to(self.device)
 
 
-    # Main method to run your experiment. Should be self-explanatory.
     def run(self):
         start_epoch = self.current_epoch
         for epoch in range(start_epoch, self.epochs):  # loop over the dataset multiple times
@@ -132,16 +133,16 @@ class _Experiment(object):
                 self.experiment.log_metrics({'Train_Metric/BLEU-1': bleu1_scores_t}, epoch=epoch)
                 self.experiment.log_metrics({'Train_Metric/BLEU-4': bleu4_scores_t}, epoch=epoch)
             
-            # val_loss, bleu1_scores_v, bleu4_scores_v = self.val()
-            if LOG_COMET:
-                self.experiment.log_metrics({'Val_Loss': val_loss}, epoch=epoch)
-                self.experiment.log_metrics({'Val_Metric/BLEU-1': bleu1_scores_v}, epoch=epoch)
-                self.experiment.log_metrics({'Val_Metric/BLEU-4': bleu4_scores_v}, epoch=epoch)
+#             val_loss, bleu1_scores_v, bleu4_scores_v = self.val()
+#             if LOG_COMET:
+#                 self.experiment.log_metrics({'Val_Loss': val_loss}, epoch=epoch)
+#                 self.experiment.log_metrics({'Val_Metric/BLEU-1': bleu1_scores_v}, epoch=epoch)
+#                 self.experiment.log_metrics({'Val_Metric/BLEU-4': bleu4_scores_v}, epoch=epoch)
 
-            # Early stopping
-            # if val_loss < self.best_loss:
-            #     self.best_loss = val_loss
-            #     torch.save(self.model, './saved_models/{}'.format(self.name))
+#             # Early stopping
+#             if val_loss < self.best_loss:
+#                 self.best_loss = val_loss
+#                 torch.save(self.model, './saved_models/{}'.format(self.name))
 
 
     def train(self):
@@ -149,11 +150,10 @@ class _Experiment(object):
         training_loss = 0
         bleu1_scores = 0.0
         bleu4_scores = 0.0
-        print_iter = 100
+        print_iter = 50
         if_counter = 0
 
         for i, (prem, hyp, lab) in enumerate(self.train_loader):
-            # if i >0: sys.exit()
             self.model.zero_grad()
 
             prem = prem.long().to(self.device)
@@ -174,7 +174,9 @@ class _Experiment(object):
             # View deterministic predictions
             if i % print_iter == 0:
                 if_counter += 1
+                
                 # Get the sentence without the <start> and <end> and other tags
+                clean_premise_text = clean_caption(prem, self.tokenizer)
                 clean_preds_text = clean_caption(preds, self.tokenizer)
                 clean_targets_text = clean_caption(hyp, self.tokenizer)
 
@@ -185,10 +187,12 @@ class _Experiment(object):
                 bleu4_scores += (b4/len(clean_preds_text))
 
                 print(self.current_epoch, i, ": ------ TRAIN ------")
-                print("------ word predictions ------")
-                print(clean_preds_text[0])
-                print("------ truth ------")
+                print("------ Actual Premise ------")
+                print(clean_premise_text[0])
+                print("------ Actual Hypothesis ------")
                 print(clean_targets_text[0])
+                print("------ Predicted Hypothesis ------")
+                print(clean_preds_text[0])
                 print()
 
         return training_loss/(i+1), bleu1_scores/if_counter, bleu4_scores/if_counter
@@ -198,12 +202,11 @@ class _Experiment(object):
         val_loss = 0
         bleu1_scores = 0.0
         bleu4_scores = 0.0
-        print_iter = 100 # Number of iterations to skip before printing predictions 
+        print_iter = 50 
         if_counter = 0
 
         with torch.no_grad():
             for i, (prem, hyp, lab) in enumerate(self.val_loader):
-
                 prem = prem.long().to(self.device)
                 hyp = hyp.long().to(self.device)
                 lab = lab.to(self.device)
@@ -220,7 +223,9 @@ class _Experiment(object):
                 # View deterministic predictions
                 if i % print_iter == 0:
                     if_counter += 1
+                    
                     # Get the sentence without the <start> and <end> and other tags
+                    clean_premise_text = clean_caption(prem, self.tokenizer)
                     clean_preds_text = clean_caption(preds, self.tokenizer)
                     clean_targets_text = clean_caption(hyp, self.tokenizer)
 
@@ -231,28 +236,27 @@ class _Experiment(object):
                     bleu4_scores += (b4/len(clean_preds_text))
 
                     print(self.current_epoch, i, ": ------ VALIDATION ------")
-                    print("------ word predictions ------")
-                    print(clean_preds_text[0])
-                    print("------ truth ------")
+                    print("------ Actual Premise ------")
+                    print(clean_premise_text[0])
+                    print("------ Actual Hypothesis ------")
                     print(clean_targets_text[0])
+                    print("------ Predicted Hypothesis ------")
+                    print(clean_preds_text[0])
                     print()
 
 
         return val_loss/(i+1), bleu1_scores/if_counter, bleu4_scores/if_counter
 
-    #  bleu scores using the best model. Use utility functions provided to you in caption_utils.
-    #  Note than you'll need image_ids and COCO object in this case to fetch all captions to generate bleu scores.
     def test(self):
         self.model = torch.load('./saved_models/{}'.format(self.name))
         self.model.eval()
-        print_iter = 50 
         test_loss = 0
         bleu1_scores = 0.0
         bleu4_scores = 0.0
+        print_iter = 50 
 
         with torch.no_grad():
             for i, (prem, hyp, lab) in enumerate(self.test_loader):
-
                 prem = prem.long().to(self.device)
                 hyp = hyp.long().to(self.device)
                 lab = lab.to(self.device)
@@ -268,6 +272,7 @@ class _Experiment(object):
                 test_loss += loss.item()
 
                 # Get the sentence without the <start> and <end> and other tags
+                clean_premise_text = clean_caption(prem, self.tokenizer)
                 clean_preds_text = clean_caption(preds, self.tokenizer)
                 clean_targets_text = clean_caption(hyp, self.tokenizer)
 
@@ -276,12 +281,15 @@ class _Experiment(object):
                 b4 = calculate_bleu(bleu4, clean_preds_text, clean_targets_text)
                 bleu1_scores += (b1/len(clean_preds_text))
                 bleu4_scores += (b4/len(clean_preds_text))
-                if i % print_iter == 0: 
+                
+                if i % print_iter == 0:
                     print(i, ": ------ TEST ------")
-                    print("------ word predictions ------")
-                    print(clean_preds_text[0])
-                    print("------ truth ------")
+                    print("------ Actual Premise ------")
+                    print(clean_premise_text[0])
+                    print("------ Actual Hypothesis ------")
                     print(clean_targets_text[0])
+                    print("------ Predicted Hypothesis ------")
+                    print(clean_preds_text[0])
                     print()
 
         bleu1_scores = bleu1_scores/(i+1)
@@ -298,6 +306,7 @@ class _Experiment(object):
 
         return test_loss, bleu1_scores, bleu4_scores
 
+    
     def save_model(self):
         root_model_path = os.path.join(self.experiment_dir, 'latest_model.pt')
         model_dict = self.model.state_dict()

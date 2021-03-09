@@ -50,21 +50,25 @@ class VAE(nn.Module):
         # Initialize weights
         self.init_weights()
         
+        
     def init_weights(self):
         """
         Initialize weights
         """
         # Initialize encoder layer weights
-        # None :D 
+        torch.nn.init.xavier_uniform_(self.repar_ll.weight)
+        torch.nn.init.xavier_uniform_(self.repar_ll.bias.reshape((-1,1)))
 
         # Initialize decoder layer weights
         torch.nn.init.xavier_uniform_(self.decoder_ll.weight)
         torch.nn.init.xavier_uniform_(self.decoder_ll.bias.reshape((-1,1)))
 
+        
     def reparameterize(self, mu, logvar):
         std = torch.exp(0.5*logvar)
         eps = torch.randn_like(std)
         return mu + eps*std
+        
         
     def forward(self, premises, hypothesis, labels, device, is_teacher_forcing_on=True):
         
@@ -126,6 +130,7 @@ class VAE(nn.Module):
         
         return outputted_words, raw_outputs
 
+    
 class BERT(nn.Module):
     #https://towardsdatascience.com/bert-text-classification-using-pytorch-723dfb8b6b5b
     def __init__(self):

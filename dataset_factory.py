@@ -17,20 +17,20 @@ def getDataloaders(csv_file, max_length, batch_size, num_workers):
     train_dataset, val_dataset, test_dataset = random_split(all_data, (num_train, num_val, num_test))
 
     train_dataloader = DataLoader(dataset=train_dataset,
-                      batch_size=batch_size,
-                      shuffle=True,
-                      num_workers=num_workers,
-                      pin_memory=True) # Pin memory makes it faster to move from CPU to GPU, optional
-    val_dataloader = DataLoader(dataset=val_dataset,
-                      batch_size=batch_size,
-                      shuffle=True,
-                      num_workers=num_workers,
-                      pin_memory=True)
-    test_dataloader = DataLoader(dataset=test_dataset,
-                      batch_size=batch_size,
-                      shuffle=False,
-                      num_workers=num_workers,
-                      pin_memory=True)
+                          batch_size=batch_size,
+                          shuffle=True,
+                          num_workers=num_workers,
+                          pin_memory=True) # Pin memory makes it faster to move from CPU to GPU, optional
+    val_dataloader   = DataLoader(dataset=val_dataset,
+                          batch_size=batch_size,
+                          shuffle=True,
+                          num_workers=num_workers,
+                          pin_memory=True)
+    test_dataloader  = DataLoader(dataset=test_dataset,
+                          batch_size=batch_size,
+                          shuffle=False,
+                          num_workers=num_workers,
+                          pin_memory=True)
     return all_data.tokenizer, train_dataloader, val_dataloader, test_dataloader
     
 
@@ -40,6 +40,7 @@ class TextDataset(Dataset):
         self.data = self.data[self.data['lang_abv'] == 'en'] # Drop non-english rows 
         self.max_length = max_length
         self.tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
+    
     def __len__(self):
         return len(self.data)
     
@@ -57,7 +58,6 @@ class TextDataset(Dataset):
                 padding='max_length')
     
     def __getitem__(self, idx):
-        
         prem = self.data.iloc[idx]['premise']
         hypo = self.data.iloc[idx]['hypothesis']
         
