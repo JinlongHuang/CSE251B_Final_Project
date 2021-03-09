@@ -4,7 +4,7 @@
 *.jpeg
 
 # Additional data
-/data/*
+# /data/*
 
 # Metadata Files
 .vscode/*

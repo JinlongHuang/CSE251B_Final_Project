@@ -1,12 +1,12 @@
 {
   "experiment_name": "baseline",
   "dataset": {
-    "data_file_path": "./data/train.csv",
-    "batch_size": 30,
+    "data_file_path": "./data/train_english_only.csv",
+    "batch_size": 512,
     "num_workers": 4
   },
   "experiment": {
-    "num_epochs": 25,
+    "num_epochs": 50,
     "learning_rate": 5e-4
   },
   "model": {
@@ -17,6 +17,6 @@
   "generation": {
     "max_length": 20,
     "deterministic": true,
-    "temperature": 2
+    "temperature": 0.1
   }
 }
