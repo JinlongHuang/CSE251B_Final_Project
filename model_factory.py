@@ -14,14 +14,17 @@ from transformers import BertTokenizer, BertForSequenceClassification
 def getModel(config, vocab_size):
     embedding_size = config['model']['embedding_size']
     hidden_size = config['model']['hidden_size']
+    is_variational = config['model']['is_variational']
+    
     deterministic = config['generation']['deterministic']
     temperature = config['generation']['temperature']
+    max_length = config['generation']['max_length']
     
-    return VAE(embedding_size, hidden_size, vocab_size, deterministic, temperature)
+    return VAE(embedding_size, hidden_size, vocab_size, deterministic, temperature, max_length, is_variational)
 
     
 class VAE(nn.Module):
-    def __init__(self, embedding_size, hidden_size, vocab_size, deterministic, temperature):
+    def __init__(self, embedding_size, hidden_size, vocab_size, deterministic, temperature, max_length, is_variational):
         """
             Variational Autoencoder 
         """
@@ -30,6 +33,7 @@ class VAE(nn.Module):
         # Save parameters
         self.embedding_size = embedding_size
         self.hidden_size = hidden_size
+        self.is_variational = is_variational
         
         self.deterministic = deterministic
         self.temperature = temperature
@@ -41,7 +45,8 @@ class VAE(nn.Module):
         self.enc_lstm = nn.LSTM(embedding_size, hidden_size, batch_first=True)
 
         # Reparameterization layer
-        self.repar_ll = nn.Linear(hidden_size, hidden_size)
+        self.mu_ll = nn.Linear(hidden_size, hidden_size)
+        self.logvar_ll = nn.Linear(hidden_size, hidden_size)
 
         # Define Decoder
         self.dec_lstm = nn.LSTM(embedding_size, hidden_size, batch_first=True)
@@ -56,8 +61,10 @@ class VAE(nn.Module):
         Initialize weights
         """
         # Initialize encoder layer weights
-        torch.nn.init.xavier_uniform_(self.repar_ll.weight)
-        torch.nn.init.xavier_uniform_(self.repar_ll.bias.reshape((-1,1)))
+        torch.nn.init.xavier_uniform_(self.mu_ll.weight)
+        torch.nn.init.xavier_uniform_(self.mu_ll.bias.reshape((-1,1)))
+        torch.nn.init.xavier_uniform_(self.logvar_ll.weight)
+        torch.nn.init.xavier_uniform_(self.logvar_ll.bias.reshape((-1,1)))
 
         # Initialize decoder layer weights
         torch.nn.init.xavier_uniform_(self.decoder_ll.weight)
@@ -68,31 +75,36 @@ class VAE(nn.Module):
         std = torch.exp(0.5*logvar)
         eps = torch.randn_like(std)
         return mu + eps*std
-        
+    
         
     def forward(self, premises, hypothesis, labels, device, is_teacher_forcing_on=True):
+        # Replace start tag with the label; batch x max_len
+        # Anshuman: I'm unsure about this. Our model should work without it
+#         premises[:, 0] = labels 
         
-        # Encode premise features
-        premises[:, 0] = labels # Replace start tag with the label; batch x max_len
+        # Encode premise features 
         prem_embedded = self.embed(premises) # batch x max_len x embedding_size
 
-        batch_size = premises.shape[0]
-        h_0 = torch.zeros(1, batch_size, self.hidden_size).to(device)
-        enc_hidden = (h_0,h_0)
-        # hidden[0]: 1 x batch x hidden_size (hidden state)
-        # hidden[1]: 1 x batch x hidden_size (cell state)
-        hidden = self.enc_lstm(prem_embedded, enc_hidden)[1] # hidden is the set of feats that will be passed to decoder
+        _, hidden = self.enc_lstm(prem_embedded) # hidden is the set of feats that will be passed to decoder
+        
+        # Initialize variables
+        mu0 = 0
+        log_var0 = 0
 
-        # Sample using reparameterization
-        # Hidden state
-        mu0 = self.repar_ll(hidden[0].permute(1,0,2))
-        log_var0 = self.repar_ll(hidden[0].permute(1,0,2))
-        z0 = self.reparameterize(mu0, log_var0).permute(1,0,2) # 1 x batch x hidden_size
-        # Cell state
-        mu1 = self.repar_ll(hidden[1].permute(1,0,2))
-        log_var1 = self.repar_ll(hidden[1].permute(1,0,2))
-        z1 = self.reparameterize(mu1, log_var1).permute(1,0,2) # 1 x batch x hidden_size
-        hidden = (z0, z1)
+        if self.is_variational:
+            # Sample using reparameterization
+            ## Hidden state
+            mu0 = self.mu_ll(hidden[0].permute(1,0,2))
+            log_var0 = self.logvar_ll(hidden[0].permute(1,0,2))
+            z0 = self.reparameterize(mu0, log_var0).permute(1,0,2) # 1 x batch x hidden_size
+
+            # Anshuman: Divyanshu suggests we don't need this
+            ## Cell state
+#             mu1 = self.mu_ll(hidden[1].permute(1,0,2))
+#             log_var1 = self.logvar_ll(hidden[1].permute(1,0,2))
+#             z1 = self.reparameterize(mu1, log_var1).permute(1,0,2) # 1 x batch x hidden_size
+
+            hidden = (z0, z0)
 
         # Decoder
         outputted_words = torch.zeros(hypothesis.shape).to(device) # batch x max_len
@@ -107,7 +119,7 @@ class VAE(nn.Module):
             # Run through LSTM
             # lstm_out: batch x 1 x hidden_size
             # hidden:   1 x batch x hidden_size
-            lstm_out, hidden = self.dec_lstm(embedding, hidden)
+            lstm_out, _ = self.dec_lstm(embedding, hidden) # Anshuman: Divyanshu suggests passing initial hidden state every time
 
             # Create raw output
             outputs = self.decoder_ll(lstm_out) # batch x 1 x vocab_size
@@ -128,7 +140,7 @@ class VAE(nn.Module):
             if is_teacher_forcing_on:
                 pred = torch.unsqueeze(hypothesis[:, i],1) # batch x 1
         
-        return outputted_words, raw_outputs
+        return outputted_words, raw_outputs, mu0, log_var0
 
     
 class BERT(nn.Module):

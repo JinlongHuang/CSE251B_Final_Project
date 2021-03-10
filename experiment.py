@@ -41,7 +41,7 @@ class _Experiment(object):
         model_config = config_data['model']
         hidden_size = model_config['hidden_size']
         embedding_size = model_config['embedding_size']
-        model_type = model_config['model_type']
+        self.is_variational = model_config['is_variational']
         
         generation_config = config_data['generation']
         max_length = generation_config['max_length']
@@ -119,6 +119,20 @@ class _Experiment(object):
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.model.to(self.device)
         self.criterion.to(self.device)
+        
+       
+    def loss_function(self, raw_outputs, hypothesis, mu, logvar):
+        ceLoss = self.criterion(raw_outputs, hypothesis)
+        print(ceLoss)
+        
+        if self.is_variational:
+            klLoss = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
+            klLoss /= len(raw_outputs)
+            
+            ceLoss += klLoss
+            print(klLoss)
+        
+        return ceLoss
 
 
     def run(self):
@@ -133,16 +147,16 @@ class _Experiment(object):
                 self.experiment.log_metrics({'Train_Metric/BLEU-1': bleu1_scores_t}, epoch=epoch)
                 self.experiment.log_metrics({'Train_Metric/BLEU-4': bleu4_scores_t}, epoch=epoch)
             
-#             val_loss, bleu1_scores_v, bleu4_scores_v = self.val()
-#             if LOG_COMET:
-#                 self.experiment.log_metrics({'Val_Loss': val_loss}, epoch=epoch)
-#                 self.experiment.log_metrics({'Val_Metric/BLEU-1': bleu1_scores_v}, epoch=epoch)
-#                 self.experiment.log_metrics({'Val_Metric/BLEU-4': bleu4_scores_v}, epoch=epoch)
+            val_loss, bleu1_scores_v, bleu4_scores_v = self.val()
+            if LOG_COMET:
+                self.experiment.log_metrics({'Val_Loss': val_loss}, epoch=epoch)
+                self.experiment.log_metrics({'Val_Metric/BLEU-1': bleu1_scores_v}, epoch=epoch)
+                self.experiment.log_metrics({'Val_Metric/BLEU-4': bleu4_scores_v}, epoch=epoch)
 
-#             # Early stopping
-#             if val_loss < self.best_loss:
-#                 self.best_loss = val_loss
-#                 torch.save(self.model, './saved_models/{}'.format(self.name))
+            # Early stopping
+            if val_loss < self.best_loss:
+                self.best_loss = val_loss
+                torch.save(self.model, './saved_models/{}'.format(self.name))
 
 
     def train(self):
@@ -161,10 +175,10 @@ class _Experiment(object):
             lab = lab.to(self.device)
 
             # Forward pass
-            preds, raw_outputs = self.model(prem, hyp, lab, self.device, is_teacher_forcing_on=True)
+            preds, raw_outputs, mu, logvar = self.model(prem, hyp, lab, self.device, is_teacher_forcing_on=True)
 
             # Calculate loss and perform backprop
-            loss = self.criterion(raw_outputs[:,1:].permute(0, 2, 1), hyp[:,1:])
+            loss = self.loss_function(raw_outputs[:,1:].permute(0, 2, 1), hyp[:,1:], mu, logvar)
             loss.backward()
             self.optimizer.step()
 
@@ -212,10 +226,10 @@ class _Experiment(object):
                 lab = lab.to(self.device)
 
                 # Forward pass
-                preds, raw_outputs = self.model(prem, hyp, lab, self.device, is_teacher_forcing_on=True)
+                preds, raw_outputs, mu, logvar = self.model(prem, hyp, lab, self.device, is_teacher_forcing_on=True)
 
                 # Calculate loss and perform backprop
-                loss = self.criterion(raw_outputs[:,1:].permute(0, 2, 1), hyp[:,1:])
+                loss = self.loss_function(raw_outputs[:,1:].permute(0, 2, 1), hyp[:,1:], mu, logvar)
 
                 # Log the training loss
                 val_loss += loss.item()
@@ -262,11 +276,11 @@ class _Experiment(object):
                 lab = lab.to(self.device)
 
                 # Forward pass
-                _, raw_outputs = self.model(prem, hyp, lab, self.device, is_teacher_forcing_on=True)
-                preds, _ = self.model(prem, hyp, lab, self.device, is_teacher_forcing_on=False)
+                _, raw_outputs, mu, logvar = self.model(prem, hyp, lab, self.device, is_teacher_forcing_on=True)
+                preds, _, _, _ = self.model(prem, hyp, lab, self.device, is_teacher_forcing_on=False)
 
                 # Calculate loss and perform backprop
-                loss = self.criterion(raw_outputs[:,1:].permute(0, 2, 1), hyp[:,1:])
+                loss = self.loss_function(raw_outputs[:,1:].permute(0, 2, 1), hyp[:,1:], mu, logvar)
 
                 # Log the training loss
                 test_loss += loss.item()

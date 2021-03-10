@@ -12,11 +12,11 @@
   "model": {
     "hidden_size": 512,
     "embedding_size": 300,
-    "model_type": "LSTM"
+    "is_variational": false
   },
   "generation": {
     "max_length": 20,
     "deterministic": true,
-    "temperature": 0.1
+    "temperature": 0.2
   }
 }
