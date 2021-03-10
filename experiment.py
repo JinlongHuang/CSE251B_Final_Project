@@ -73,7 +73,7 @@ class _Experiment(object):
         self.best_model = None  # Save your best model in this field and use this in test method.
 
         if LOG_COMET:
-            tags = [self.name, model_type, prediction_type]
+            tags = [self.name, self.is_variational, prediction_type]
             hyper_params = {
                 "Epochs": self.epochs,
                 "Batch Size": batch_size,
@@ -123,14 +123,14 @@ class _Experiment(object):
        
     def loss_function(self, raw_outputs, hypothesis, mu, logvar):
         ceLoss = self.criterion(raw_outputs, hypothesis)
-        print(ceLoss)
+#         print(ceLoss)
         
         if self.is_variational:
             klLoss = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
             klLoss /= len(raw_outputs)
             
             ceLoss += klLoss
-            print(klLoss)
+#             print(klLoss)
         
         return ceLoss
 
