@@ -1,7 +1,7 @@
 {
   "experiment_name": "baseline",
   "dataset": {
-    "data_file_path": "./data/train_english_only.csv",
+    "data_file_path": ["./data/train.csv", "./data/snli_train.csv"],
     "batch_size": 512,
     "num_workers": 4
   },

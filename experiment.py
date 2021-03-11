@@ -12,6 +12,7 @@ import torch
 import torch.optim as optim
 import sys
 
+from transformers import BertTokenizer
 from datetime import datetime
 from constants import *
 from dataset_factory import getDataloaders
@@ -32,7 +33,7 @@ class _Experiment(object):
         dataset_config = config_data['dataset']
         batch_size = dataset_config['batch_size']
         num_workers = dataset_config['num_workers']
-        data_file = dataset_config['data_file_path']
+        data_files = dataset_config['data_file_path']
 
         experiment_config = config_data['experiment']
         self.epochs = experiment_config['num_epochs']
@@ -58,8 +59,9 @@ class _Experiment(object):
             )
 
         # Load Datasets
-        tokenizer, self.train_loader, self.val_loader, self.test_loader = getDataloaders(
-            data_file, max_length, batch_size, num_workers)
+        tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
+        self.train_loader, self.val_loader, self.test_loader = getDataloaders(
+            data_files, max_length, batch_size, num_workers, tokenizer)
         
         # Setup Experiment
         self.current_epoch = 0
@@ -147,16 +149,17 @@ class _Experiment(object):
                 self.experiment.log_metrics({'Train_Metric/BLEU-1': bleu1_scores_t}, epoch=epoch)
                 self.experiment.log_metrics({'Train_Metric/BLEU-4': bleu4_scores_t}, epoch=epoch)
             
-            val_loss, bleu1_scores_v, bleu4_scores_v = self.val()
-            if LOG_COMET:
-                self.experiment.log_metrics({'Val_Loss': val_loss}, epoch=epoch)
-                self.experiment.log_metrics({'Val_Metric/BLEU-1': bleu1_scores_v}, epoch=epoch)
-                self.experiment.log_metrics({'Val_Metric/BLEU-4': bleu4_scores_v}, epoch=epoch)
+#             val_loss, bleu1_scores_v, bleu4_scores_v = self.val()
+#             if LOG_COMET:
+#                 self.experiment.log_metrics({'Val_Loss': val_loss}, epoch=epoch)
+#                 self.experiment.log_metrics({'Val_Metric/BLEU-1': bleu1_scores_v}, epoch=epoch)
+#                 self.experiment.log_metrics({'Val_Metric/BLEU-4': bleu4_scores_v}, epoch=epoch)
 
-            # Early stopping
-            if val_loss < self.best_loss:
-                self.best_loss = val_loss
-                torch.save(self.model, './saved_models/{}'.format(self.name))
+#             # Early stopping
+#             if val_loss < self.best_loss:
+#                 self.best_loss = val_loss
+#                 torch.save(self.model, './saved_models/{}'.format(self.name))
+            sys.exit()
 
 
     def train(self):
