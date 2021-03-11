@@ -169,11 +169,10 @@ class _Experiment(object):
                 # if LOG_COMET:
                 #     self.experiment.log_metrics({'Val_Loss': val_loss}, epoch=epoch)
 
-#             # Early stopping
-#             if val_loss < self.best_loss:
-#                 self.best_loss = val_loss
-#                 torch.save(self.model, './saved_models/{}'.format(self.name))
-            sys.exit()
+            # Early stopping
+            if val_loss < self.best_loss:
+                self.best_loss = val_loss
+                torch.save(self.model, './saved_models/{}'.format(self.name))
 
 ########################## VAE ##############################
     def train_vae(self):
@@ -192,7 +191,7 @@ class _Experiment(object):
             lab = lab.to(self.device)
 
             # Forward pass
-            preds, raw_outputs, mu, logvar = self.model(prem, hyp, lab, self.device, is_teacher_forcing_on=True)
+            preds, raw_outputs, mu, logvar = self.model(prem, hyp, lab, self.device, is_teacher_forcing_on=True, skip_generation=i % print_iter != 0)
 
             # Calculate loss and perform backprop
             loss = self.loss_function(raw_outputs[:,1:].permute(0, 2, 1), hyp[:,1:], mu, logvar)
@@ -243,7 +242,7 @@ class _Experiment(object):
                 lab = lab.to(self.device)
 
                 # Forward pass
-                preds, raw_outputs, mu, logvar = self.model(prem, hyp, lab, self.device, is_teacher_forcing_on=True)
+                preds, raw_outputs, mu, logvar = self.model(prem, hyp, lab, self.device, is_teacher_forcing_on=True, skip_generation=i % print_iter != 0)
 
                 # Calculate loss and perform backprop
                 loss = self.loss_function(raw_outputs[:,1:].permute(0, 2, 1), hyp[:,1:], mu, logvar)

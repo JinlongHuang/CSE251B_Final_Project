@@ -81,7 +81,7 @@ class VAE(nn.Module):
         return mu + eps*std
     
         
-    def forward(self, premises, hypothesis, labels, device, is_teacher_forcing_on=True):
+    def forward(self, premises, hypothesis, labels, device, is_teacher_forcing_on=True, skip_generation=False):
         # Replace start tag with the label; batch x max_len
         # Anshuman: I'm unsure about this. Our model should work without it
 #         premises[:, 0] = labels 
@@ -131,14 +131,15 @@ class VAE(nn.Module):
             # Save raw result
             raw_outputs[:, i, :] = outputs.squeeze() # batch x max_len x vocab_size
 
-            # Get predicted word 
-            if self.deterministic:
-                pred = torch.argmax(outputs, dim=2) # batch x 1
-            else:
-                pred = stochastic_generation(outputs, self.temperature)
+            if not skip_generation:
+                # Get predicted word 
+                if self.deterministic:
+                    pred = torch.argmax(outputs, dim=2) # batch x 1
+                else:
+                    pred = stochastic_generation(outputs, self.temperature)
 
-            # Save the word result 
-            outputted_words[:, i] = pred.squeeze() # batch x max_len
+                # Save the word result 
+                outputted_words[:, i] = pred.squeeze() # batch x max_len
 
             # If we're training, use teacher forcing instead
             if is_teacher_forcing_on:
