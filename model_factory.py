@@ -8,19 +8,23 @@ import torch.nn as nn
 import torch
 import sys
 from caption_utils import *
-from transformers import BertTokenizer, BertForSequenceClassification
+from transformers import BertForSequenceClassification
 
 # Build and return the model here based on the configuration.
 def getModel(config, vocab_size):
     embedding_size = config['model']['embedding_size']
     hidden_size = config['model']['hidden_size']
     is_variational = config['model']['is_variational']
+    is_vae = config['model']['is_vae']
     
     deterministic = config['generation']['deterministic']
     temperature = config['generation']['temperature']
     max_length = config['generation']['max_length']
     
-    return VAE(embedding_size, hidden_size, vocab_size, deterministic, temperature, max_length, is_variational)
+    if is_vae:
+        return VAE(embedding_size, hidden_size, vocab_size, deterministic, temperature, max_length, is_variational)
+    else:
+        return BertForSequenceClassification.from_pretrained('bert-base-uncased', num_labels=3)
 
     
 class VAE(nn.Module):
@@ -141,16 +145,3 @@ class VAE(nn.Module):
                 pred = torch.unsqueeze(hypothesis[:, i],1) # batch x 1
         
         return outputted_words, raw_outputs, mu0, log_var0
-
-    
-class BERT(nn.Module):
-    #https://towardsdatascience.com/bert-text-classification-using-pytorch-723dfb8b6b5b
-    def __init__(self):
-        super(BERT, self).__init__()
-
-        self.encoder = BertForSequenceClassification.from_pretrained("bert-base-uncased")
-
-    def forward(self, text, label):
-        loss, text_feat = self.encoder(text, labels=label)[:2]
-
-        return loss, text_feat

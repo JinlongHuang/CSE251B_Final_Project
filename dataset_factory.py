@@ -1,7 +1,6 @@
 import pandas as pd
 import torch
 from torch.utils.data import Dataset, DataLoader, random_split # For custom data-sets
-from datasets import load_dataset
 
 # TODO: Remove this after we finish debugging!
 torch.manual_seed(0)
@@ -83,16 +82,18 @@ class TextDataset(Dataset):
             raise e
         return toReturn
     
+
     def __getitem__(self, idx):
-        
-        
         prem = self.data.iloc[idx]['premise']
         hypo = self.data.iloc[idx]['hypothesis']
         
         # Tokenize with BERT 
-        # TODO: make use of 'token_type_ids' and 'attention_mask' (attention will disregard the PAD tokens)
-        # Currently only uses 'input_ids' which is a tokenized representation similar to 
-        premise = self._tokenize(prem)['input_ids']
-        hypothesis = self._tokenize(hypo)['input_ids']
-                
-        return torch.LongTensor(premise), torch.LongTensor(hypothesis), self.data.iloc[idx]['label']
+        # Make use of 'token_type_ids' and 'attention_mask' (attention will disregard the PAD tokens)
+
+        prem_id = self._tokenize(prem)['input_ids']
+        hypo_id = self._tokenize(hypo)['input_ids']
+
+        prem_att_mask = self._tokenize(prem)['attention_mask']
+        hypo_att_mask = self._tokenize(hypo)['attention_mask']
+        
+        return torch.Tensor(prem_id), torch.Tensor(hypo_id), torch.Tensor(prem_att_mask), torch.Tensor(hypo_att_mask), self.data.iloc[idx]['label']

@@ -40,6 +40,7 @@ class _Experiment(object):
         learning_rate = experiment_config['learning_rate']
 
         model_config = config_data['model']
+        self.is_vae = model_config['is_vae']
         hidden_size = model_config['hidden_size']
         embedding_size = model_config['embedding_size']
         self.is_variational = model_config['is_variational']
@@ -122,7 +123,7 @@ class _Experiment(object):
         self.model.to(self.device)
         self.criterion.to(self.device)
         
-       
+
     def loss_function(self, raw_outputs, hypothesis, mu, logvar):
         ceLoss = self.criterion(raw_outputs, hypothesis)
 #         print(ceLoss)
@@ -143,17 +144,30 @@ class _Experiment(object):
             start_time = datetime.now()
             self.current_epoch = epoch
 
-            train_loss, bleu1_scores_t, bleu4_scores_t = self.train()
-            if LOG_COMET:
-                self.experiment.log_metrics({'Train_Loss': train_loss}, epoch=epoch)
-                self.experiment.log_metrics({'Train_Metric/BLEU-1': bleu1_scores_t}, epoch=epoch)
-                self.experiment.log_metrics({'Train_Metric/BLEU-4': bleu4_scores_t}, epoch=epoch)
-            
-#             val_loss, bleu1_scores_v, bleu4_scores_v = self.val()
-#             if LOG_COMET:
-#                 self.experiment.log_metrics({'Val_Loss': val_loss}, epoch=epoch)
-#                 self.experiment.log_metrics({'Val_Metric/BLEU-1': bleu1_scores_v}, epoch=epoch)
-#                 self.experiment.log_metrics({'Val_Metric/BLEU-4': bleu4_scores_v}, epoch=epoch)
+            if self.is_vae:
+                ########################## VAE ##############################
+                train_loss, bleu1_scores_t, bleu4_scores_t = self.train_vae()
+                if LOG_COMET:
+                    self.experiment.log_metrics({'Train_Loss': train_loss}, epoch=epoch)
+                    self.experiment.log_metrics({'Train_Metric/BLEU-1': bleu1_scores_t}, epoch=epoch)
+                    self.experiment.log_metrics({'Train_Metric/BLEU-4': bleu4_scores_t}, epoch=epoch)
+                
+                val_loss, bleu1_scores_v, bleu4_scores_v = self.val_vae()
+                if LOG_COMET:
+                    self.experiment.log_metrics({'Val_Loss': val_loss}, epoch=epoch)
+                    self.experiment.log_metrics({'Val_Metric/BLEU-1': bleu1_scores_v}, epoch=epoch)
+                    self.experiment.log_metrics({'Val_Metric/BLEU-4': bleu4_scores_v}, epoch=epoch)
+            else:
+                ########################## BERT ##############################
+                train_loss= self.train_bert() 
+                # # train_loss, accu_train= self.train_bert()
+                # if LOG_COMET:
+                #     self.experiment.log_metrics({'Train_Loss': train_loss}, epoch=epoch)
+                
+                # val_loss = self.val_bert() 
+                # # val_loss, accu_val = self.val_bert()
+                # if LOG_COMET:
+                #     self.experiment.log_metrics({'Val_Loss': val_loss}, epoch=epoch)
 
 #             # Early stopping
 #             if val_loss < self.best_loss:
@@ -161,8 +175,8 @@ class _Experiment(object):
 #                 torch.save(self.model, './saved_models/{}'.format(self.name))
             sys.exit()
 
-
-    def train(self):
+########################## VAE ##############################
+    def train_vae(self):
         self.model.train()
         training_loss = 0
         bleu1_scores = 0.0
@@ -170,7 +184,7 @@ class _Experiment(object):
         print_iter = 50
         if_counter = 0
 
-        for i, (prem, hyp, lab) in enumerate(self.train_loader):
+        for i, (prem, hyp, _, _, lab) in enumerate(self.train_loader):
             self.model.zero_grad()
 
             prem = prem.long().to(self.device)
@@ -214,7 +228,7 @@ class _Experiment(object):
 
         return training_loss/(i+1), bleu1_scores/if_counter, bleu4_scores/if_counter
 
-    def val(self):
+    def val_vae(self):
         self.model.eval()
         val_loss = 0
         bleu1_scores = 0.0
@@ -223,7 +237,7 @@ class _Experiment(object):
         if_counter = 0
 
         with torch.no_grad():
-            for i, (prem, hyp, lab) in enumerate(self.val_loader):
+            for i, (prem, hyp, _, _, lab) in enumerate(self.val_loader):
                 prem = prem.long().to(self.device)
                 hyp = hyp.long().to(self.device)
                 lab = lab.to(self.device)
@@ -264,7 +278,7 @@ class _Experiment(object):
 
         return val_loss/(i+1), bleu1_scores/if_counter, bleu4_scores/if_counter
 
-    def test(self):
+    def test_vae(self):
         self.model = torch.load('./saved_models/{}'.format(self.name))
         self.model.eval()
         test_loss = 0
@@ -273,7 +287,7 @@ class _Experiment(object):
         print_iter = 50 
 
         with torch.no_grad():
-            for i, (prem, hyp, lab) in enumerate(self.test_loader):
+            for i, (prem, hyp, _, _, lab) in enumerate(self.test_loader):
                 prem = prem.long().to(self.device)
                 hyp = hyp.long().to(self.device)
                 lab = lab.to(self.device)
@@ -323,7 +337,139 @@ class _Experiment(object):
 
         return test_loss, bleu1_scores, bleu4_scores
 
+########################## BERT ##############################
+    def train_bert(self):
+        self.model.train()
+        training_loss = 0
+        print_iter = 50
+
+        for i, (prem_id, hyp_id, prem_att_mask, hypo_att_mask, lab) in enumerate(self.train_loader):
+            self.model.zero_grad()
+
+            # Push data to GPU
+            prem_id = prem_id.long().to(self.device)
+            hyp_id = hyp_id.long().to(self.device)
+            prem_att_mask =  prem_att_mask.long().to(self.device)
+            hypo_att_mask = hypo_att_mask.long().to(self.device)
+            lab = lab.long().to(self.device)
+
+            # Prepare data as inputs to bert
+            input_ids = torch.cat((prem_id, hyp_id), dim=1)
+            attention_mask = torch.cat((prem_att_mask, hypo_att_mask), dim=1)
+            label = lab.unsqueeze(1)
+
+            # Forward pass
+            outputs = self.model(input_ids, attention_mask=attention_mask, labels=label) 
+
+            # Calculate loss and perform backprop
+            loss = outputs.loss
+            loss.backward()
+            self.optimizer.step()
+
+            # Log the training loss
+            training_loss += loss.item()
+
+            # View deterministic predictions
+            if i % print_iter == 0:
+                print(self.current_epoch, i, ": ------ TRAIN ------")
+                print("------ Actual Label ------")
+                print(lab[i])
+                print("------ Predicted Label ------")
+                print()
+
+            # TODO: calculate training accuracy = correct predictions/total predictions
+
+        return training_loss/(i+1)
+            
+    def val_bert(self):
+        self.model.val()
+        val_loss = 0
+        print_iter = 50
+
+        with torch.no_grad():
+            for i, (prem_id, hyp_id, prem_att_mask, hypo_att_mask, lab) in enumerate(self.val_loader):
+                self.model.zero_grad()
+
+                # Push data to GPU
+                prem_id = prem_id.long().to(self.device)
+                hyp_id = hyp_id.long().to(self.device)
+                prem_att_mask =  prem_att_mask.long().to(self.device)
+                hypo_att_mask = hypo_att_mask.long().to(self.device)
+                lab = lab.long().to(self.device)
+
+                # Prepare data as inputs to bert
+                input_ids = torch.cat((prem_id, hyp_id), dim=1)
+                attention_mask = torch.cat((prem_att_mask, hypo_att_mask), dim=1)
+                label = lab.unsqueeze(1)
+
+                # Forward pass
+                outputs = self.model(input_ids, attention_mask=attention_mask, labels=label) 
+
+                # Calculate loss and perform backprop
+                loss = outputs.loss
+                loss.backward()
+                self.optimizer.step()
+
+                # Log the val loss
+                val_loss += loss.item()
+
+                # View deterministic predictions
+                if i % print_iter == 0:
+                    print(self.current_epoch, i, ": ------ val ------")
+                    print("------ Actual Label ------")
+                    print(lab[i])
+                    print("------ Predicted Label ------")
+                    print()
+
+                # TODO: calculate val accuracy = correct predictions/total predictions
+
+        return val_loss/(i+1)
+
+    def test_bert(self):
+        self.model.val()
+        test_loss = 0
+        print_iter = 50
+
+        for i, (prem_id, hyp_id, prem_att_mask, hypo_att_mask, lab) in enumerate(self.test_loader):
+            self.model.zero_grad()
+
+            # Push data to GPU
+            prem_id = prem_id.long().to(self.device)
+            hyp_id = hyp_id.long().to(self.device)
+            prem_att_mask =  prem_att_mask.long().to(self.device)
+            hypo_att_mask = hypo_att_mask.long().to(self.device)
+            lab = lab.long().to(self.device)
+
+            # Prepare data as inputs to bert
+            input_ids = torch.cat((prem_id, hyp_id), dim=1)
+            attention_mask = torch.cat((prem_att_mask, hypo_att_mask), dim=1)
+            label = lab.unsqueeze(1)
+
+            # Forward pass
+            outputs = self.model(input_ids, attention_mask=attention_mask, labels=label) 
+
+            # Calculate loss and perform backprop
+            loss = outputs.loss
+            loss.backward()
+            self.optimizer.step()
+
+            # Log the test loss
+            test_loss += loss.item()
+
+            # View deterministic predictions
+            if i % print_iter == 0:
+                print(self.current_epoch, i, ": ------ test ------")
+                print("------ Actual Label ------")
+                print(lab[i])
+                print("------ Predicted Label ------")
+                print()
+
+            # TODO: calculate test accuracy = correct predictions/total predictions
+
+        return test_loss/(i+1)
     
+
+########################## Log ##############################
     def save_model(self):
         root_model_path = os.path.join(self.experiment_dir, 'latest_model.pt')
         model_dict = self.model.state_dict()

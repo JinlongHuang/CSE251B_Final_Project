@@ -2,7 +2,7 @@
   "experiment_name": "baseline",
   "dataset": {
     "data_file_path": ["./data/train.csv", "./data/snli_train.csv"],
-    "batch_size": 512,
+    "batch_size": 64,
     "num_workers": 4
   },
   "experiment": {
@@ -12,10 +12,11 @@
   "model": {
     "hidden_size": 512,
     "embedding_size": 300,
-    "is_variational": false
+    "is_variational": false,
+    "is_vae": true
   },
   "generation": {
-    "max_length": 20,
+    "max_length": 30,
     "deterministic": true,
     "temperature": 0.2
   }
