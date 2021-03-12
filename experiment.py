@@ -380,12 +380,12 @@ class _Experiment(object):
             training_loss += loss.item()
 
             # Get predicted labels
-            predicted = torch.argmax(outputs.logits)
+            predicted = torch.argmax(outputs.logits, 1)
 
-            # calculate training accuracy = correct predictions/total predictions
-            total_pred += 1
-            if lab[i] == predicted[i]:
-                correct_pred += 1
+            for j in lab:
+                total_pred += 1
+                if lab[j] == predicted[j]:
+                    correct_pred += 1
             acc = correct_pred / total_pred
 
             # View deterministic predictions
