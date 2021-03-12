@@ -2,7 +2,7 @@
   "experiment_name": "vae_5e4",
   "dataset": {
     "data_file_path": ["./snli_data/snli_train.csv"],
-    "batch_size": 256,
+    "batch_size": 64,
     "num_workers": 4
   },
   "experiment": {
@@ -12,7 +12,7 @@
   "model": {
     "hidden_size": 512,
     "embedding_size": 300,
-    "is_vae": true,
+    "is_vae": false,
     "is_variational": true,
     "is_conditional": false,
     "class_label": -1
