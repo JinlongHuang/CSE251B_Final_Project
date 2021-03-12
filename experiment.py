@@ -378,7 +378,7 @@ class _Experiment(object):
             training_loss += loss.item()
 
             # Get predicted labels
-            _, predicted = torch.max(outputs, 1)
+            predicted = torch.argmax(outputs.logits)
 
             # View deterministic predictions
             if i % print_iter == 0:
