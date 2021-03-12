@@ -350,6 +350,8 @@ class _Experiment(object):
         self.model.train()
         training_loss = 0
         print_iter = 50
+        total_pred = 0
+        correct_pred = 0
 
         for i, (prem_id, hyp_id, prem_att_mask, hypo_att_mask, lab) in enumerate(self.train_loader):
             self.model.zero_grad()
@@ -380,6 +382,12 @@ class _Experiment(object):
             # Get predicted labels
             predicted = torch.argmax(outputs.logits)
 
+            # calculate training accuracy = correct predictions/total predictions
+            total_pred += 1
+            if lab[i] == predicted[i]:
+                correct_pred += 1
+            acc = correct_pred / total_pred
+
             # View deterministic predictions
             if i % print_iter == 0:
                 print(self.current_epoch, i, ": ------ TRAIN ------")
@@ -387,8 +395,7 @@ class _Experiment(object):
                 print(lab[i])
                 print("------ Predicted Label ------")
                 print(predicted[i])
-
-            # TODO: calculate training accuracy = correct predictions/total predictions
+                print("Current training accuracy: ", acc)
 
         return training_loss/(i+1)
             
@@ -396,6 +403,8 @@ class _Experiment(object):
         self.model.val()
         val_loss = 0
         print_iter = 50
+        total_pred = 0
+        correct_pred = 0
 
         with torch.no_grad():
             for i, (prem_id, hyp_id, prem_att_mask, hypo_att_mask, lab) in enumerate(self.val_loader):
@@ -424,15 +433,23 @@ class _Experiment(object):
                 # Log the val loss
                 val_loss += loss.item()
 
+                # Get predicted labels
+                predicted = torch.argmax(outputs.logits)
+
+                # calculate val accuracy = correct predictions/total predictions
+                total_pred += 1
+                if lab[i] == predicted[i]:
+                    correct_pred += 1
+                acc = correct_pred / total_pred
+
                 # View deterministic predictions
                 if i % print_iter == 0:
                     print(self.current_epoch, i, ": ------ val ------")
                     print("------ Actual Label ------")
                     print(lab[i])
                     print("------ Predicted Label ------")
-                    print()
-
-                # TODO: calculate val accuracy = correct predictions/total predictions
+                    print(predicted[i])
+                    print("Current validation accuracy: ", acc)
 
         return val_loss/(i+1)
 
@@ -440,6 +457,8 @@ class _Experiment(object):
         self.model.val()
         test_loss = 0
         print_iter = 50
+        total_pred = 0
+        correct_pred = 0
 
         for i, (prem_id, hyp_id, prem_att_mask, hypo_att_mask, lab) in enumerate(self.test_loader):
             self.model.zero_grad()
@@ -467,15 +486,23 @@ class _Experiment(object):
             # Log the test loss
             test_loss += loss.item()
 
+            # Get predicted labels
+            predicted = torch.argmax(outputs.logits)
+
+            # calculate test accuracy = correct predictions/total predictions
+            total_pred += 1
+            if lab[i] == predicted[i]:
+                correct_pred += 1
+            acc = correct_pred / total_pred
+
             # View deterministic predictions
             if i % print_iter == 0:
                 print(self.current_epoch, i, ": ------ test ------")
                 print("------ Actual Label ------")
                 print(lab[i])
                 print("------ Predicted Label ------")
-                print()
-
-            # TODO: calculate test accuracy = correct predictions/total predictions
+                print(predicted[i])
+                print("Current test accuracy: ", acc)
 
         return test_loss/(i+1)
     
