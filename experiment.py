@@ -357,11 +357,13 @@ class _Experiment(object):
             self.model.zero_grad()
 
             # Push data to GPU
+            '''
             prem_id = prem_id.long().to(self.device)
             hyp_id = hyp_id.long().to(self.device)
             prem_att_mask =  prem_att_mask.long().to(self.device)
             hypo_att_mask = hypo_att_mask.long().to(self.device)
             lab = lab.long().to(self.device)
+            '''
 
             # Prepare data as inputs to bert
             input_ids = torch.cat((prem_id, hyp_id), dim=1)
@@ -382,6 +384,7 @@ class _Experiment(object):
             # Get predicted labels
             predicted = torch.argmax(outputs.logits, 1)
 
+            # calculate val accuracy = correct predictions/total predictions
             for j in lab:
                 total_pred += 1
                 if lab[j] == predicted[j]:
@@ -437,9 +440,10 @@ class _Experiment(object):
                 predicted = torch.argmax(outputs.logits)
 
                 # calculate val accuracy = correct predictions/total predictions
-                total_pred += 1
-                if lab[i] == predicted[i]:
-                    correct_pred += 1
+                for j in lab:
+                    total_pred += 1
+                    if lab[j] == predicted[j]:
+                        correct_pred += 1
                 acc = correct_pred / total_pred
 
                 # View deterministic predictions
@@ -490,11 +494,10 @@ class _Experiment(object):
             predicted = torch.argmax(outputs.logits)
 
             # calculate test accuracy = correct predictions/total predictions
-            total_pred += 1
-            print(lab[i])
-            print(predicted[i])
-            if lab[i] == predicted[i]:
-                correct_pred += 1
+            for j in lab:
+                total_pred += 1
+                if lab[j] == predicted[j]:
+                    correct_pred += 1
             acc = correct_pred / total_pred
 
             # View deterministic predictions
