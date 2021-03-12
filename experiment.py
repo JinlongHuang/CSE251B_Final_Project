@@ -377,13 +377,16 @@ class _Experiment(object):
             # Log the training loss
             training_loss += loss.item()
 
+            # Get predicted labels
+            _, predicted = torch.max(outputs, 1)
+
             # View deterministic predictions
             if i % print_iter == 0:
                 print(self.current_epoch, i, ": ------ TRAIN ------")
                 print("------ Actual Label ------")
                 print(lab[i])
                 print("------ Predicted Label ------")
-                print()
+                print(predicted[i])
 
             # TODO: calculate training accuracy = correct predictions/total predictions
 
