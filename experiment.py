@@ -44,6 +44,8 @@ class _Experiment(object):
         hidden_size = model_config['hidden_size']
         embedding_size = model_config['embedding_size']
         self.is_variational = model_config['is_variational']
+        self.is_conditional = model_config['is_conditional']
+        class_label = model_config['class_label']
         
         generation_config = config_data['generation']
         max_length = generation_config['max_length']
@@ -51,8 +53,9 @@ class _Experiment(object):
         temperature = generation_config['temperature']
 
         self.experiment_dir = os.path.join(ROOT_STATS_DIR, self.name)
+        self.log_comet = config_data['comet']['log_comet']
 
-        if LOG_COMET:
+        if self.log_comet:
             self.experiment = Experiment(
                 api_key="CaoCCUZVjE0gXKA3cbtMKSSKL",
                 project_name="image-captioning-251b",
@@ -62,7 +65,7 @@ class _Experiment(object):
         # Load Datasets
         tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
         self.train_loader, self.val_loader, self.test_loader = getDataloaders(
-            data_files, max_length, batch_size, num_workers, tokenizer)
+            data_files, max_length, batch_size, num_workers, tokenizer, class_label=class_label)
         
         # Setup Experiment
         self.current_epoch = 0
@@ -75,7 +78,7 @@ class _Experiment(object):
         self.best_loss = float('inf')
         self.best_model = None  # Save your best model in this field and use this in test method.
 
-        if LOG_COMET:
+        if config_data['generation']:
             tags = [self.name, self.is_variational, prediction_type]
             hyper_params = {
                 "Epochs": self.epochs,
@@ -87,8 +90,9 @@ class _Experiment(object):
                 "Temperature": temperature
             }
 
-            self.experiment.add_tags(tags)
-            self.experiment.log_parameters(hyper_params)
+            if self.log_comet:
+                self.experiment.add_tags(tags)
+                self.experiment.log_parameters(hyper_params)
 
         # Initialize Model
         self.tokenizer = tokenizer
@@ -147,13 +151,13 @@ class _Experiment(object):
             if self.is_vae:
                 ########################## VAE ##############################
                 train_loss, bleu1_scores_t, bleu4_scores_t = self.train_vae()
-                if LOG_COMET:
+                if self.log_comet:
                     self.experiment.log_metrics({'Train_Loss': train_loss}, epoch=epoch)
                     self.experiment.log_metrics({'Train_Metric/BLEU-1': bleu1_scores_t}, epoch=epoch)
                     self.experiment.log_metrics({'Train_Metric/BLEU-4': bleu4_scores_t}, epoch=epoch)
                 
                 val_loss, bleu1_scores_v, bleu4_scores_v = self.val_vae()
-                if LOG_COMET:
+                if self.log_comet:
                     self.experiment.log_metrics({'Val_Loss': val_loss}, epoch=epoch)
                     self.experiment.log_metrics({'Val_Metric/BLEU-1': bleu1_scores_v}, epoch=epoch)
                     self.experiment.log_metrics({'Val_Metric/BLEU-4': bleu4_scores_v}, epoch=epoch)
@@ -161,18 +165,23 @@ class _Experiment(object):
                 ########################## BERT ##############################
                 train_loss= self.train_bert() 
                 # # train_loss, accu_train= self.train_bert()
-                # if LOG_COMET:
+                # if self.log_comet:
                 #     self.experiment.log_metrics({'Train_Loss': train_loss}, epoch=epoch)
                 
                 # val_loss = self.val_bert() 
                 # # val_loss, accu_val = self.val_bert()
-                # if LOG_COMET:
+                # if self.log_comet:
                 #     self.experiment.log_metrics({'Val_Loss': val_loss}, epoch=epoch)
 
             # Early stopping
             if val_loss < self.best_loss:
                 self.best_loss = val_loss
                 torch.save(self.model, './saved_models/{}'.format(self.name))
+                
+        if self.is_vae:
+            self.test_vae()
+        else:
+            self.test_bert()
 
 ########################## VAE ##############################
     def train_vae(self):
@@ -180,7 +189,7 @@ class _Experiment(object):
         training_loss = 0
         bleu1_scores = 0.0
         bleu4_scores = 0.0
-        print_iter = 50
+        print_iter = 150
         if_counter = 0
 
         for i, (prem, hyp, _, _, lab) in enumerate(self.train_loader):
@@ -191,7 +200,7 @@ class _Experiment(object):
             lab = lab.to(self.device)
 
             # Forward pass
-            preds, raw_outputs, mu, logvar = self.model(prem, hyp, lab, self.device, is_teacher_forcing_on=True, skip_generation=i % print_iter != 0)
+            preds, raw_outputs, mu, logvar = self.model(prem, hyp, lab, self.device, is_teacher_forcing_on=True, skip_generation=i % print_iter != 0, is_conditional=self.is_conditional)
 
             # Calculate loss and perform backprop
             loss = self.loss_function(raw_outputs[:,1:].permute(0, 2, 1), hyp[:,1:], mu, logvar)
@@ -232,7 +241,7 @@ class _Experiment(object):
         val_loss = 0
         bleu1_scores = 0.0
         bleu4_scores = 0.0
-        print_iter = 50 
+        print_iter = 150 
         if_counter = 0
 
         with torch.no_grad():
@@ -242,7 +251,7 @@ class _Experiment(object):
                 lab = lab.to(self.device)
 
                 # Forward pass
-                preds, raw_outputs, mu, logvar = self.model(prem, hyp, lab, self.device, is_teacher_forcing_on=True, skip_generation=i % print_iter != 0)
+                preds, raw_outputs, mu, logvar = self.model(prem, hyp, lab, self.device, is_teacher_forcing_on=True, skip_generation=i % print_iter != 0, is_conditional=self.is_conditional)
 
                 # Calculate loss and perform backprop
                 loss = self.loss_function(raw_outputs[:,1:].permute(0, 2, 1), hyp[:,1:], mu, logvar)
@@ -283,7 +292,7 @@ class _Experiment(object):
         test_loss = 0
         bleu1_scores = 0.0
         bleu4_scores = 0.0
-        print_iter = 50 
+        print_iter = 150 
 
         with torch.no_grad():
             for i, (prem, hyp, _, _, lab) in enumerate(self.test_loader):
@@ -292,8 +301,8 @@ class _Experiment(object):
                 lab = lab.to(self.device)
 
                 # Forward pass
-                _, raw_outputs, mu, logvar = self.model(prem, hyp, lab, self.device, is_teacher_forcing_on=True)
-                preds, _, _, _ = self.model(prem, hyp, lab, self.device, is_teacher_forcing_on=False)
+                _, raw_outputs, mu, logvar = self.model(prem, hyp, lab, self.device, is_teacher_forcing_on=True, is_conditional=self.is_conditional)
+                preds, _, _, _ = self.model(prem, hyp, lab, self.device, is_teacher_forcing_on=False, is_conditional=self.is_conditional)
 
                 # Calculate loss and perform backprop
                 loss = self.loss_function(raw_outputs[:,1:].permute(0, 2, 1), hyp[:,1:], mu, logvar)
@@ -329,7 +338,7 @@ class _Experiment(object):
         result_str = "Test Performance: Loss: {}, Bleu1: {}, Bleu4: {}".format(test_loss, bleu1_scores, bleu4_scores)
         self.log(result_str)
 
-        if LOG_COMET:
+        if self.log_comet:
             self.experiment.log_metrics({'Test_Loss': test_loss})
             self.experiment.log_metrics({'Test_Metric/BLEU-1': bleu1_scores})
             self.experiment.log_metrics({'Test_Metric/BLEU-4': bleu4_scores})

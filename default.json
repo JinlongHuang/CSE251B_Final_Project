@@ -1,23 +1,28 @@
 {
-  "experiment_name": "baseline",
+  "experiment_name": "vae_5e4",
   "dataset": {
-    "data_file_path": ["./data/train.csv", "./data/snli_train.csv"],
-    "batch_size": 64,
+    "data_file_path": ["./snli_data/snli_train.csv"],
+    "batch_size": 256,
     "num_workers": 4
   },
   "experiment": {
-    "num_epochs": 50,
+    "num_epochs": 10,
     "learning_rate": 5e-4
   },
   "model": {
     "hidden_size": 512,
     "embedding_size": 300,
-    "is_variational": false,
-    "is_vae": true
+    "is_vae": true,
+    "is_variational": true,
+    "is_conditional": false,
+    "class_label": -1
   },
   "generation": {
     "max_length": 30,
     "deterministic": true,
     "temperature": 0.2
+  },
+  "comet": {
+    "log_comet": true
   }
 }
