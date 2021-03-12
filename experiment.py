@@ -491,6 +491,8 @@ class _Experiment(object):
 
             # calculate test accuracy = correct predictions/total predictions
             total_pred += 1
+            print(lab[i])
+            print(predicted[i])
             if lab[i] == predicted[i]:
                 correct_pred += 1
             acc = correct_pred / total_pred
