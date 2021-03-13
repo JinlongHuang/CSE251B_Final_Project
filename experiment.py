@@ -358,16 +358,16 @@ class _Experiment(object):
 
             # Push data to GPU
             # (Model is pushed to GPU in line 127)
-            prem_id = prem_id.to(self.device)
-            hyp_id = hyp_id.to(self.device)
-            prem_att_mask =  prem_att_mask.to(self.device)
-            hypo_att_mask = hypo_att_mask.to(self.device)
-            lab = lab.to(self.device)
+            prem_id = prem_id.long().to(self.device)
+            hyp_id = hyp_id.long().to(self.device)
+            prem_att_mask =  prem_att_mask.long().to(self.device)
+            hypo_att_mask = hypo_att_mask.long().to(self.device)
+            lab = lab.long().to(self.device)
 
             # Prepare data as inputs to bert
-            input_ids = torch.cat((prem_id, hyp_id), dim=1).long()
-            attention_mask = torch.cat((prem_att_mask, hypo_att_mask), dim=1).long()
-            label = lab.unsqueeze(1).long()
+            input_ids = torch.cat((prem_id, hyp_id), dim=1)
+            attention_mask = torch.cat((prem_att_mask, hypo_att_mask), dim=1)
+            label = lab.unsqueeze(1)
 
             # Forward pass
             outputs = self.model(input_ids, attention_mask=attention_mask, labels=label) 
@@ -382,6 +382,7 @@ class _Experiment(object):
 
             # Get predicted labels
             predicted = torch.argmax(outputs.logits, 1)
+            # print(predicted)
 
             # calculate val accuracy = correct predictions/total predictions
             for j in range(len(lab)):
@@ -417,16 +418,16 @@ class _Experiment(object):
                 self.model.zero_grad()
 
                 # Push data to GPU
-                prem_id = prem_id.to(self.device)
-                hyp_id = hyp_id.to(self.device)
-                prem_att_mask =  prem_att_mask.to(self.device)
-                hypo_att_mask = hypo_att_mask.to(self.device)
-                lab = lab.to(self.device)
+                prem_id = prem_id.long().to(self.device)
+                hyp_id = hyp_id.long().to(self.device)
+                prem_att_mask =  prem_att_mask.long().to(self.device)
+                hypo_att_mask = hypo_att_mask.long().to(self.device)
+                lab = lab.long().to(self.device)
 
                 # Prepare data as inputs to bert
-                input_ids = torch.cat((prem_id, hyp_id), dim=1).long()
-                attention_mask = torch.cat((prem_att_mask, hypo_att_mask), dim=1).long()
-                label = lab.unsqueeze(1).long()
+                input_ids = torch.cat((prem_id, hyp_id), dim=1))
+                attention_mask = torch.cat((prem_att_mask, hypo_att_mask), dim=1)
+                label = lab.unsqueeze(1))
 
                 # Forward pass
                 outputs = self.model(input_ids, attention_mask=attention_mask, labels=label) 
@@ -471,16 +472,16 @@ class _Experiment(object):
             self.model.zero_grad()
 
             # Push data to GPU
-            prem_id = prem_id.to(self.device)
-            hyp_id = hyp_id.to(self.device)
-            prem_att_mask =  prem_att_mask.to(self.device)
-            hypo_att_mask = hypo_att_mask.to(self.device)
-            lab = lab.to(self.device)
+            prem_id = prem_id.long().to(self.device)
+            hyp_id = hyp_id.long().to(self.device)
+            prem_att_mask =  prem_att_mask.long().to(self.device)
+            hypo_att_mask = hypo_att_mask.long().to(self.device)
+            lab = lab.long().to(self.device)
 
             # Prepare data as inputs to bert
-            input_ids = torch.cat((prem_id, hyp_id), dim=1).long()
-            attention_mask = torch.cat((prem_att_mask, hypo_att_mask), dim=1).long()
-            label = lab.unsqueeze(1).long()
+            input_ids = torch.cat((prem_id, hyp_id), dim=1)
+            attention_mask = torch.cat((prem_att_mask, hypo_att_mask), dim=1)
+            label = lab.unsqueeze(1)
 
             # Forward pass
             outputs = self.model(input_ids, attention_mask=attention_mask, labels=label) 
