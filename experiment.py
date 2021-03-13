@@ -425,9 +425,9 @@ class _Experiment(object):
                 lab = lab.long().to(self.device)
 
                 # Prepare data as inputs to bert
-                input_ids = torch.cat((prem_id, hyp_id), dim=1))
+                input_ids = torch.cat((prem_id, hyp_id), dim=1)
                 attention_mask = torch.cat((prem_att_mask, hypo_att_mask), dim=1)
-                label = lab.unsqueeze(1))
+                label = lab.unsqueeze(1)
 
                 # Forward pass
                 outputs = self.model(input_ids, attention_mask=attention_mask, labels=label) 
