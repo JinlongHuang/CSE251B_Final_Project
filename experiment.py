@@ -130,14 +130,11 @@ class _Experiment(object):
 
     def loss_function(self, raw_outputs, hypothesis, mu, logvar):
         ceLoss = self.criterion(raw_outputs, hypothesis)
-#         print(ceLoss)
-        
         if self.is_variational:
             klLoss = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
             klLoss /= len(raw_outputs)
             
             ceLoss += klLoss
-#             print(klLoss)
         
         return ceLoss
 
@@ -163,14 +160,12 @@ class _Experiment(object):
                     self.experiment.log_metrics({'Val_Metric/BLEU-4': bleu4_scores_v}, epoch=epoch)
             else:
                 ########################## BERT ##############################
-                # train_loss= self.train_bert() 
                 train_loss, train_accu= self.train_bert()
                 if self.log_comet:
                     self.experiment.log_metrics({'Train_Loss': train_loss}, epoch=epoch)
                     self.experiment.log_metrics({'Train_Accu': train_accu}, epoch=epoch)
                 
                 val_loss, val_accu = self.val_bert() 
-                # val_loss, accu_val = self.val_bert()
                 if self.log_comet:
                     self.experiment.log_metrics({'Val_Loss': val_loss}, epoch=epoch)
                     self.experiment.log_metrics({'Val_Accu': val_accu}, epoch=epoch)
@@ -340,7 +335,7 @@ class _Experiment(object):
         result_str = "Test Performance: Loss: {}, Bleu1: {}, Bleu4: {}".format(test_loss, bleu1_scores, bleu4_scores)
         self.log(result_str)
 
-        if self.log_comet:
+        if self.log_comet and self.is_vae:
             self.experiment.log_metrics({'Test_Loss': test_loss})
             self.experiment.log_metrics({'Test_Metric/BLEU-1': bleu1_scores})
             self.experiment.log_metrics({'Test_Metric/BLEU-4': bleu4_scores})
@@ -390,22 +385,22 @@ class _Experiment(object):
                 total_pred += 1
                 if lab[j] == predicted[j]:
                     correct_pred += 1
-            acc = correct_pred / total_pred
+            accu = correct_pred / total_pred
 
             # View deterministic predictions
             if i % print_iter == 0:
                 print(self.current_epoch, i, ": ------ TRAIN ------")
-                print("------ Actual Label ------")
+                print("------ Actual Labels ------")
                 print(lab)
-                print("------ Predicted Label ------")
+                print("------ Predicted Labels ------")
                 print(predicted)
-                print("Current training accuracy: ", acc)
+                print("Current training accuracy: ", accu)
 
             # debugging code
             # if i==print_iter:
             #     sys.exit()
 
-        return training_loss/(i+1), acc
+        return training_loss/(i+1), accu
             
     def val_bert(self):
         self.model.eval()
@@ -447,18 +442,18 @@ class _Experiment(object):
                     total_pred += 1
                     if lab[j] == predicted[j]:
                         correct_pred += 1
-                acc = correct_pred / total_pred
+                accu = correct_pred / total_pred
 
                 # View deterministic predictions
                 if i % print_iter == 0:
-                    print(self.current_epoch, i, ": ------ val ------")
-                    print("------ Actual Label ------")
+                    print(self.current_epoch, i, ": ------ VAL ------")
+                    print("------ Actual Labels ------")
                     print(lab)
-                    print("------ Predicted Label ------")
+                    print("------ Predicted Labels ------")
                     print(predicted)
-                    print("Current validation accuracy: ", acc)
+                    print("Current validation accuracy: ", accu)
 
-        return val_loss/(i+1), acc
+        return val_loss/(i+1), accu
 
     def test_bert(self):
         self.model.eval()
@@ -499,18 +494,22 @@ class _Experiment(object):
                 total_pred += 1
                 if lab[j] == predicted[j]:
                     correct_pred += 1
-            acc = correct_pred / total_pred
+            accu = correct_pred / total_pred
 
             # View deterministic predictions
             if i % print_iter == 0:
-                print(self.current_epoch, i, ": ------ test ------")
-                print("------ Actual Label ------")
+                print(self.current_epoch, i, ": ------ TEST ------")
+                print("------ Actual Labels ------")
                 print(lab)
-                print("------ Predicted Label ------")
+                print("------ Predicted Labels ------")
                 print(predicted)
-                print("Current test accuracy: ", acc)
+                print("Current test accuracy: ", accu)
 
-        return test_loss/(i+1), acc
+        if self.log_comet and (not self.is_vae):
+            self.experiment.log_metrics({'Test_Loss': test_loss})
+            self.experiment.log_metrics({'Test_Accu': accu})
+
+        return test_loss/(i+1), accu
     
 
 ########################## Log ##############################
