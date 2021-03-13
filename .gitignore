@@ -4,7 +4,9 @@
 *.jpeg
 
 # Additional data
-# /data/*
+/data/*
+/experiment_data/*
+/saved_models/*
 
 # Metadata Files
 .vscode/*

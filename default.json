@@ -1,7 +1,7 @@
 {
-  "experiment_name": "vae_5e4",
+  "experiment_name": "vae_5e4_baseline_translated",
   "dataset": {
-    "data_file_path": ["./snli_data/snli_train.csv"],
+    "data_file_path": ["./data/translated_train_text.csv"],
     "batch_size": 256,
     "num_workers": 4
   },

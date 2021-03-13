@@ -50,10 +50,14 @@ def getDataloaders(csv_file_paths, max_length, batch_size, num_workers, tokenize
 class TextDataset(Dataset):
     def __init__(self, csv_file, max_length, tokenizer, class_label=-1):
         self.data = pd.read_csv(csv_file)
-        self.data = self.data[self.data['lang_abv'] == 'en'] # Drop non-english rows 
+        
+        self.translated = (False, True)['translated' in csv_file]
+
+        if not self.translated:
+            self.data = self.data[self.data['lang_abv'] == 'en'] # Drop non-english rows 
         self.max_length = max_length
         self.tokenizer = tokenizer
-        self.csv_file = csv_file 
+        self.csv_file = csv_file
         
         if class_label == 0:
             self.data = self.data[self.data['label'] == 0]
@@ -91,8 +95,12 @@ class TextDataset(Dataset):
     
 
     def __getitem__(self, idx):
-        prem = self.data.iloc[idx]['premise']
-        hypo = self.data.iloc[idx]['hypothesis']
+        if self.translated:
+            prem = self.data.iloc[idx]['premise_translated']
+            hypo = self.data.iloc[idx]['hypothesis_translated']
+        else:
+            prem = self.data.iloc[idx]['premise']
+            hypo = self.data.iloc[idx]['hypothesis']
         
         # Tokenize with BERT 
         # Make use of 'token_type_ids' and 'attention_mask' (attention will disregard the PAD tokens)
