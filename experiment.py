@@ -163,15 +163,17 @@ class _Experiment(object):
                     self.experiment.log_metrics({'Val_Metric/BLEU-4': bleu4_scores_v}, epoch=epoch)
             else:
                 ########################## BERT ##############################
-                train_loss= self.train_bert() 
-                # # train_loss, accu_train= self.train_bert()
-                # if self.log_comet:
-                #     self.experiment.log_metrics({'Train_Loss': train_loss}, epoch=epoch)
+                # train_loss= self.train_bert() 
+                train_loss, train_accu= self.train_bert()
+                if self.log_comet:
+                    self.experiment.log_metrics({'Train_Loss': train_loss}, epoch=epoch)
+                    self.experiment.log_metrics({'Train_Accu': train_accu}, epoch=epoch)
                 
-                # val_loss = self.val_bert() 
-                # # val_loss, accu_val = self.val_bert()
-                # if self.log_comet:
-                #     self.experiment.log_metrics({'Val_Loss': val_loss}, epoch=epoch)
+                val_loss, val_accu = self.val_bert() 
+                # val_loss, accu_val = self.val_bert()
+                if self.log_comet:
+                    self.experiment.log_metrics({'Val_Loss': val_loss}, epoch=epoch)
+                    self.experiment.log_metrics({'Val_Accu': val_accu}, epoch=epoch)
 
             # Early stopping
             if val_loss < self.best_loss:
@@ -382,7 +384,6 @@ class _Experiment(object):
 
             # Get predicted labels
             predicted = torch.argmax(outputs.logits, 1)
-            # print(predicted)
 
             # calculate val accuracy = correct predictions/total predictions
             for j in range(len(lab)):
@@ -404,10 +405,10 @@ class _Experiment(object):
             # if i==print_iter:
             #     sys.exit()
 
-        return training_loss/(i+1)
+        return training_loss/(i+1), acc
             
     def val_bert(self):
-        self.model.val()
+        self.model.eval()
         val_loss = 0
         print_iter = 50
         total_pred = 0
@@ -434,14 +435,12 @@ class _Experiment(object):
 
                 # Calculate loss and perform backprop
                 loss = outputs.loss
-                loss.backward()
-                self.optimizer.step()
 
                 # Log the val loss
                 val_loss += loss.item()
 
                 # Get predicted labels
-                predicted = torch.argmax(outputs.logits)
+                predicted = torch.argmax(outputs.logits, 1)
 
                 # calculate val accuracy = correct predictions/total predictions
                 for j in range(len(lab)):
@@ -459,10 +458,10 @@ class _Experiment(object):
                     print(predicted)
                     print("Current validation accuracy: ", acc)
 
-        return val_loss/(i+1)
+        return val_loss/(i+1), acc
 
     def test_bert(self):
-        self.model.val()
+        self.model.eval()
         test_loss = 0
         print_iter = 50
         total_pred = 0
@@ -488,14 +487,12 @@ class _Experiment(object):
 
             # Calculate loss and perform backprop
             loss = outputs.loss
-            loss.backward()
-            self.optimizer.step()
 
             # Log the test loss
             test_loss += loss.item()
 
             # Get predicted labels
-            predicted = torch.argmax(outputs.logits)
+            predicted = torch.argmax(outputs.logits, 1)
 
             # calculate test accuracy = correct predictions/total predictions
             for j in range(len(lab)):
@@ -513,7 +510,7 @@ class _Experiment(object):
                 print(predicted)
                 print("Current test accuracy: ", acc)
 
-        return test_loss/(i+1)
+        return test_loss/(i+1), acc
     
 
 ########################## Log ##############################

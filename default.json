@@ -1,7 +1,7 @@
 {
-  "experiment_name": "vae_5e4",
+  "experiment_name": "bert",
   "dataset": {
-    "data_file_path": ["./snli_data/snli_train.csv"],
+    "data_file_path": ["./kaggle_data/train.csv"],
     "batch_size": 64,
     "num_workers": 4
   },
@@ -23,6 +23,6 @@
     "temperature": 0.2
   },
   "comet": {
-    "log_comet": true
+    "log_comet": false
   }
 }
