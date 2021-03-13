@@ -58,6 +58,9 @@ class TextDataset(Dataset):
         self.max_length = max_length
         self.tokenizer = tokenizer
         self.csv_file = csv_file
+
+        # Remove data with label = -1
+        self.data = self.data[self.data['label'] >= 0]
         
         if class_label == 0:
             self.data = self.data[self.data['label'] == 0]

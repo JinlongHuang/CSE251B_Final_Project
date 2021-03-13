@@ -362,9 +362,9 @@ class _Experiment(object):
             lab = lab.long().to(self.device)
 
             # Prepare data as inputs to bert
-            input_ids = torch.cat((prem_id, hyp_id), dim=1)
-            attention_mask = torch.cat((prem_att_mask, hypo_att_mask), dim=1)
-            label = lab.unsqueeze(1)
+            input_ids = torch.cat((prem_id, hyp_id), dim=1).long()
+            attention_mask = torch.cat((prem_att_mask, hypo_att_mask), dim=1).long()
+            label = lab.unsqueeze(1).long()
 
             # Forward pass
             outputs = self.model(input_ids, attention_mask=attention_mask, labels=label) 
@@ -397,11 +397,12 @@ class _Experiment(object):
                 print("Current training accuracy: ", accu)
 
             # debugging code
-            # if i==print_iter:
+            # if i==print_iter+1:
+            #     print("i is: ", i)
             #     sys.exit()
 
         return training_loss/(i+1), accu
-            
+
     def val_bert(self):
         self.model.eval()
         val_loss = 0
@@ -510,7 +511,7 @@ class _Experiment(object):
             self.experiment.log_metrics({'Test_Accu': accu})
 
         return test_loss/(i+1), accu
-    
+
 
 ########################## Log ##############################
     def save_model(self):
@@ -530,9 +531,10 @@ class _Experiment(object):
         self.plot_stats()
 
         write_to_file_in_dir(self.experiment_dir, 'training_losses.txt', self.__training_losses)
+        write_to_file_in_dir(self.experiment_dir, 'val_losses.txt', self.val_losses)
+
         write_to_file_in_dir(self.experiment_dir, 'bleu1.txt', self.bleu1)
         write_to_file_in_dir(self.experiment_dir, 'bleu4.txt', self.bleu4)
-        write_to_file_in_dir(self.experiment_dir, 'val_losses.txt', self.val_losses)
 
     def log(self, log_str, file_name=None):
         print(log_str)

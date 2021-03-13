@@ -1,18 +1,18 @@
 {
-  "experiment_name": "vae_5e4_baseline_translated",
+  "experiment_name": "bert",
   "dataset": {
-    "data_file_path": ["./data/translated_train_text.csv"],
-    "batch_size": 256,
+    "data_file_path": ["./snli_data/snli_train.csv"],
+    "batch_size": 128,
     "num_workers": 4
   },
   "experiment": {
-    "num_epochs": 10,
+    "num_epochs": 30,
     "learning_rate": 5e-4
   },
   "model": {
     "hidden_size": 512,
     "embedding_size": 300,
-    "is_vae": true,
+    "is_vae": false,
     "is_variational": true,
     "is_conditional": false,
     "class_label": -1
@@ -23,6 +23,6 @@
     "temperature": 0.2
   },
   "comet": {
-    "log_comet": false
+    "log_comet": true
   }
 }
