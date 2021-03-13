@@ -2,17 +2,18 @@ import pandas as pd
 import torch
 from torch.utils.data import Dataset, DataLoader, random_split # For custom data-sets
 
+
 # TODO: Remove this after we finish debugging!
 torch.manual_seed(0)
 
-def getDataloaders(csv_file_paths, max_length, batch_size, num_workers, tokenizer, val_split=0.1, test_split=0.1, class_label=-1):
+def getDataloaders(csv_file_paths, max_length, batch_size, num_workers, tokenizer, percentage = 1, val_split=0.1, test_split=0.1, class_label=-1):
     
     # Concatenate all TextDatasets into CSV filepath
     train_datasets = []
     val_datasets = []
     test_datasets = []
     for csv_file in csv_file_paths: 
-        dataset = TextDataset(csv_file, max_length, tokenizer, class_label=class_label)
+        dataset = TextDataset(csv_file, max_length, tokenizer, percentage, class_label=class_label)
         num_val = int(len(dataset) * val_split)
         num_test = int(len(dataset) * test_split)
         num_train = int(len(dataset) - num_val - num_test)
@@ -48,7 +49,7 @@ def getDataloaders(csv_file_paths, max_length, batch_size, num_workers, tokenize
     
 
 class TextDataset(Dataset):
-    def __init__(self, csv_file, max_length, tokenizer, class_label=-1):
+    def __init__(self, csv_file, max_length, tokenizer, percentage, class_label=-1):
         self.data = pd.read_csv(csv_file)
         
         self.translated = (False, True)['translated' in csv_file]
@@ -61,6 +62,9 @@ class TextDataset(Dataset):
 
         # Remove data with label = -1
         self.data = self.data[self.data['label'] >= 0]
+
+        # Reduce dataset size
+        self.data = self.data.iloc[:int(percentage*len(self.data))]
         
         if class_label == 0:
             self.data = self.data[self.data['label'] == 0]

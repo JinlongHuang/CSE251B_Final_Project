@@ -31,6 +31,7 @@ class _Experiment(object):
         self.name = config_data['experiment_name']
 
         dataset_config = config_data['dataset']
+        data_percentage = dataset_config['data_percentage']
         batch_size = dataset_config['batch_size']
         num_workers = dataset_config['num_workers']
         data_files = dataset_config['data_file_path']
@@ -65,7 +66,7 @@ class _Experiment(object):
         # Load Datasets
         tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
         self.train_loader, self.val_loader, self.test_loader = getDataloaders(
-            data_files, max_length, batch_size, num_workers, tokenizer, class_label=class_label)
+            data_files, max_length, batch_size, num_workers, tokenizer, data_percentage, class_label=class_label)
         
         # Setup Experiment
         self.current_epoch = 0

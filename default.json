@@ -2,6 +2,7 @@
   "experiment_name": "bert",
   "dataset": {
     "data_file_path": ["./snli_data/snli_train.csv"],
+    "data_percentage": 0.1,
     "batch_size": 128,
     "num_workers": 4
   },
