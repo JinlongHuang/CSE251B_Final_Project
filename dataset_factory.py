@@ -67,6 +67,7 @@ class TextDataset(Dataset):
             self.data = self.data[self.data['label'] == 2]
         
     def __len__(self):
+        print(len(self.data))
         return len(self.data)
     
     def _tokenize(self, x):

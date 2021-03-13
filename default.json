@@ -23,6 +23,6 @@
     "temperature": 0.2
   },
   "comet": {
-    "log_comet": true
+    "log_comet": false
   }
 }

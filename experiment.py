@@ -163,15 +163,17 @@ class _Experiment(object):
                     self.experiment.log_metrics({'Val_Metric/BLEU-4': bleu4_scores_v}, epoch=epoch)
             else:
                 ########################## BERT ##############################
-                train_loss= self.train_bert() 
-                # # train_loss, accu_train= self.train_bert()
-                # if self.log_comet:
-                #     self.experiment.log_metrics({'Train_Loss': train_loss}, epoch=epoch)
+                # train_loss= self.train_bert() 
+                train_loss, train_accu= self.train_bert()
+                if self.log_comet:
+                    self.experiment.log_metrics({'Train_Loss': train_loss}, epoch=epoch)
+                    self.experiment.log_metrics({'Train_Accu': train_accu}, epoch=epoch)
                 
-                # val_loss = self.val_bert() 
-                # # val_loss, accu_val = self.val_bert()
-                # if self.log_comet:
-                #     self.experiment.log_metrics({'Val_Loss': val_loss}, epoch=epoch)
+                val_loss, val_accu = self.val_bert() 
+                # val_loss, accu_val = self.val_bert()
+                if self.log_comet:
+                    self.experiment.log_metrics({'Val_Loss': val_loss}, epoch=epoch)
+                    self.experiment.log_metrics({'Val_Accu': val_accu}, epoch=epoch)
 
             # Early stopping
             if val_loss < self.best_loss:
@@ -350,11 +352,14 @@ class _Experiment(object):
         self.model.train()
         training_loss = 0
         print_iter = 50
+        total_pred = 0
+        correct_pred = 0
 
         for i, (prem_id, hyp_id, prem_att_mask, hypo_att_mask, lab) in enumerate(self.train_loader):
             self.model.zero_grad()
 
             # Push data to GPU
+            # (Model is pushed to GPU in line 127)
             prem_id = prem_id.long().to(self.device)
             hyp_id = hyp_id.long().to(self.device)
             prem_att_mask =  prem_att_mask.long().to(self.device)
@@ -377,22 +382,37 @@ class _Experiment(object):
             # Log the training loss
             training_loss += loss.item()
 
+            # Get predicted labels
+            predicted = torch.argmax(outputs.logits, 1)
+
+            # calculate val accuracy = correct predictions/total predictions
+            for j in range(len(lab)):
+                total_pred += 1
+                if lab[j] == predicted[j]:
+                    correct_pred += 1
+            acc = correct_pred / total_pred
+
             # View deterministic predictions
             if i % print_iter == 0:
                 print(self.current_epoch, i, ": ------ TRAIN ------")
                 print("------ Actual Label ------")
-                print(lab[i])
+                print(lab)
                 print("------ Predicted Label ------")
-                print()
+                print(predicted)
+                print("Current training accuracy: ", acc)
 
-            # TODO: calculate training accuracy = correct predictions/total predictions
+            # debugging code
+            # if i==print_iter:
+            #     sys.exit()
 
-        return training_loss/(i+1)
+        return training_loss/(i+1), acc
             
     def val_bert(self):
-        self.model.val()
+        self.model.eval()
         val_loss = 0
         print_iter = 50
+        total_pred = 0
+        correct_pred = 0
 
         with torch.no_grad():
             for i, (prem_id, hyp_id, prem_att_mask, hypo_att_mask, lab) in enumerate(self.val_loader):
@@ -415,28 +435,37 @@ class _Experiment(object):
 
                 # Calculate loss and perform backprop
                 loss = outputs.loss
-                loss.backward()
-                self.optimizer.step()
 
                 # Log the val loss
                 val_loss += loss.item()
+
+                # Get predicted labels
+                predicted = torch.argmax(outputs.logits, 1)
+
+                # calculate val accuracy = correct predictions/total predictions
+                for j in range(len(lab)):
+                    total_pred += 1
+                    if lab[j] == predicted[j]:
+                        correct_pred += 1
+                acc = correct_pred / total_pred
 
                 # View deterministic predictions
                 if i % print_iter == 0:
                     print(self.current_epoch, i, ": ------ val ------")
                     print("------ Actual Label ------")
-                    print(lab[i])
+                    print(lab)
                     print("------ Predicted Label ------")
-                    print()
+                    print(predicted)
+                    print("Current validation accuracy: ", acc)
 
-                # TODO: calculate val accuracy = correct predictions/total predictions
-
-        return val_loss/(i+1)
+        return val_loss/(i+1), acc
 
     def test_bert(self):
-        self.model.val()
+        self.model.eval()
         test_loss = 0
         print_iter = 50
+        total_pred = 0
+        correct_pred = 0
 
         for i, (prem_id, hyp_id, prem_att_mask, hypo_att_mask, lab) in enumerate(self.test_loader):
             self.model.zero_grad()
@@ -458,23 +487,30 @@ class _Experiment(object):
 
             # Calculate loss and perform backprop
             loss = outputs.loss
-            loss.backward()
-            self.optimizer.step()
 
             # Log the test loss
             test_loss += loss.item()
+
+            # Get predicted labels
+            predicted = torch.argmax(outputs.logits, 1)
+
+            # calculate test accuracy = correct predictions/total predictions
+            for j in range(len(lab)):
+                total_pred += 1
+                if lab[j] == predicted[j]:
+                    correct_pred += 1
+            acc = correct_pred / total_pred
 
             # View deterministic predictions
             if i % print_iter == 0:
                 print(self.current_epoch, i, ": ------ test ------")
                 print("------ Actual Label ------")
-                print(lab[i])
+                print(lab)
                 print("------ Predicted Label ------")
-                print()
+                print(predicted)
+                print("Current test accuracy: ", acc)
 
-            # TODO: calculate test accuracy = correct predictions/total predictions
-
-        return test_loss/(i+1)
+        return test_loss/(i+1), acc
     
 
 ########################## Log ##############################
