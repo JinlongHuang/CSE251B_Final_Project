@@ -11,6 +11,7 @@ import numpy as np
 import torch
 import torch.optim as optim
 import sys
+import pandas as pd
 
 from transformers import BertTokenizer
 from datetime import datetime
@@ -213,9 +214,9 @@ class _Experiment(object):
                 if_counter += 1
                 
                 # Get the sentence without the <start> and <end> and other tags
-                clean_premise_text = clean_caption(prem, self.tokenizer)
-                clean_preds_text = clean_caption(preds, self.tokenizer)
-                clean_targets_text = clean_caption(hyp, self.tokenizer)
+                clean_premise_text,_ = clean_caption(prem, self.tokenizer)
+                clean_preds_text,_ = clean_caption(preds, self.tokenizer)
+                clean_targets_text,_ = clean_caption(hyp, self.tokenizer)
 
                 # Calculate bleu scores
                 b1 = calculate_bleu(bleu1, clean_preds_text, clean_targets_text)
@@ -262,9 +263,9 @@ class _Experiment(object):
                     if_counter += 1
                     
                     # Get the sentence without the <start> and <end> and other tags
-                    clean_premise_text = clean_caption(prem, self.tokenizer)
-                    clean_preds_text = clean_caption(preds, self.tokenizer)
-                    clean_targets_text = clean_caption(hyp, self.tokenizer)
+                    clean_premise_text,_ = clean_caption(prem, self.tokenizer)
+                    clean_preds_text,_ = clean_caption(preds, self.tokenizer)
+                    clean_targets_text,_ = clean_caption(hyp, self.tokenizer)
 
                     # Calculate bleu scores
                     b1 = calculate_bleu(bleu1, clean_preds_text, clean_targets_text)
@@ -290,7 +291,12 @@ class _Experiment(object):
         test_loss = 0
         bleu1_scores = 0.0
         bleu4_scores = 0.0
-        print_iter = 150 
+        print_iter = 150
+
+        predicted = []
+        premises = []
+        labels = []
+        language = []
 
         with torch.no_grad():
             for i, (prem, hyp, _, _, lab) in enumerate(self.test_loader):
@@ -309,10 +315,15 @@ class _Experiment(object):
                 test_loss += loss.item()
 
                 # Get the sentence without the <start> and <end> and other tags
-                clean_premise_text = clean_caption(prem, self.tokenizer)
-                clean_preds_text = clean_caption(preds, self.tokenizer)
-                clean_targets_text = clean_caption(hyp, self.tokenizer)
-
+                clean_premise_text, clean_premise_joined = clean_caption(prem, self.tokenizer)
+                clean_preds_text, clean_preds_joined = clean_caption(preds, self.tokenizer)
+                clean_targets_text, _ = clean_caption(hyp, self.tokenizer)
+                
+                predicted = predicted + clean_preds_joined
+                premises = premises + clean_premise_joined
+                labels = labels + lab.tolist()
+                language = language + ['en'] * len(clean_premise_joined)
+                
                 # Calculate bleu scores
                 b1 = calculate_bleu(bleu1, clean_preds_text, clean_targets_text)
                 b4 = calculate_bleu(bleu4, clean_preds_text, clean_targets_text)
@@ -340,6 +351,10 @@ class _Experiment(object):
             self.experiment.log_metrics({'Test_Loss': test_loss})
             self.experiment.log_metrics({'Test_Metric/BLEU-1': bleu1_scores})
             self.experiment.log_metrics({'Test_Metric/BLEU-4': bleu4_scores})
+            
+        ds = {"premise": premises, "hypothesis": predicted, "label": labels, "lang_abv": language}
+        df = pd.DataFrame(ds, columns=["premise", "hypothesis", "label", "lang_abv"])
+        df.to_csv("predicted_vae"+self.name+".csv", index=False)
 
         return test_loss, bleu1_scores, bleu4_scores
 
@@ -463,7 +478,7 @@ class _Experiment(object):
         print_iter = 50
         total_pred = 0
         correct_pred = 0
-
+        
         for i, (prem_id, hyp_id, prem_att_mask, hypo_att_mask, lab) in enumerate(self.test_loader):
             self.model.zero_grad()
 

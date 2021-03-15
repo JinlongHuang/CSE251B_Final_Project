@@ -27,20 +27,27 @@ def bleu4(reference_captions, predicted_caption):
 def clean_caption(indx, tokenizer):
     # Transforms an array of vocab indexes into an array of words with start, end, and pad tags removed. 
     clean_text = []
-
+    clean_text_joined = []
     for i in range(len(indx)):
         new_sentence = []
-
-        for p in indx[i]: 
+        new_sentence_joined = ''
+        c = 0
+        for j, p in enumerate(indx[i]):
             word = tokenizer._convert_id_to_token(int(p))
             if not (('[' in word) or (']' in word) or ('##' in word)): 
                 new_sentence.append(word)
+                if c == 0:
+                    c += 1
+                    new_sentence_joined = new_sentence_joined + word
+                else:
+                    new_sentence_joined = new_sentence_joined + " " + word
             elif '[SEP]' in word: 
                 break # End of sentence is reached x
 
         clean_text.append(new_sentence)
+        clean_text_joined.append(new_sentence_joined)
 
-    return clean_text
+    return clean_text, clean_text_joined
 
 
 def get_captions(img_ids, cocoTest):
