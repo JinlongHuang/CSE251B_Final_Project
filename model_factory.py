@@ -54,6 +54,8 @@ class VAE(nn.Module):
 
         # Define Decoder
         self.dec_lstm = nn.LSTM(embedding_size, hidden_size, batch_first=True)
+        # self.dec_lstm = nn.LSTM(embedding_size+hidden_size, hidden_size, batch_first=True) # Anshuman: if you want to also use z at every time step
+
         self.decoder_ll = nn.Linear(hidden_size, vocab_size)
 
         # Initialize weights
@@ -84,7 +86,7 @@ class VAE(nn.Module):
     def forward(self, premises, hypothesis, labels, device, is_teacher_forcing_on=True, skip_generation=False, is_conditional=False):
         # Replace start tag with the label; batch x max_len
         if is_conditional:
-            premises[:, 0] = labels 
+            premises = torch.cat([torch.unsqueeze(labels, 1), premises], dim=1)
         
         # Encode premise features 
         prem_embedded = self.embed(premises) # batch x max_len x embedding_size
@@ -99,7 +101,7 @@ class VAE(nn.Module):
             mu = self.mu_ll(hidden[0].permute(1,0,2))
             log_var = self.logvar_ll(hidden[0].permute(1,0,2))
             z = self.reparameterize(mu, log_var).permute(1,0,2) # 1 x batch x hidden_size
-
+            
             hidden = (z, z)
 
         # Decoder
@@ -111,6 +113,7 @@ class VAE(nn.Module):
 
         for i in range(1, hypothesis.shape[1]):
             embedding = self.embed(pred) # batch x 1 x embedding_size
+            # embedding = torch.cat([z.permute(0,1,2), embedding], dim=2) # Anshuman: if you want to also use z at every time step
 
             # Run through LSTM
             # lstm_out: batch x 1 x hidden_size
